@@ -10,11 +10,6 @@ from __future__ import annotations
 
 # --- Force IPv4 for ALL outbound HTTP traffic ---------------------------------
 # Must run BEFORE any HTTP client (urllib3, httpx, etc.) is initialized.
-#
-# The first patch covers urllib3-based libraries (requests, telebot, ...).
-# The second patch covers everything else, because google-genai 2.x is built
-# on httpx, which does NOT use urllib3 — without the socket-level patch the
-# Gemini call can still resolve to an IPv6 address that times out.
 import socket
 
 import urllib3.util.connection as urllib3_cn
@@ -52,6 +47,7 @@ from requests.exceptions import ReadTimeout as RequestsReadTimeout
 from requests.exceptions import Timeout as RequestsTimeout
 
 from core.article_scraper import _clean_html_to_text, scrape_article_html
+from core.arvan_ai import ArvanAIRequestError, ArvanChatClient, load_arvan_ai_config
 from core.models import NewsArticle, RssSource
 from core.news_pool import (
     collect_recent_pool,
@@ -63,8 +59,8 @@ from core.semantic_dedup import SemanticDedupFilter, build_semantic_dedup_filter
 from core.url_utils import normalize_article_url
 
 
-DEFAULT_GEMINI_MODEL = "models/gemini-2.5-flash-lite"
-GEMINI_REQUEST_TIMEOUT = 120  # seconds
+DEFAULT_ARVAN_MODEL = "Gemini-3.1-Flash-Lite-Preview"
+GEMINI_REQUEST_TIMEOUT = 120  # seconds (legacy name; used for logging)
 TELEGRAM_CHANNEL_ID = "@KhabarVarzeshi"
 
 # Per-run rewrite budget and spacing between Gemini calls.
@@ -82,6 +78,7 @@ TIMEOUT_EXCEPTIONS: tuple[type[BaseException], ...] = (
     RequestsConnectTimeout,
     RequestsTimeout,
     TimeoutError,
+    ArvanAIRequestError,
 )
 
 # Required JSON keys the Gemini response must contain.
@@ -253,28 +250,39 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         load_dotenv(settings.BASE_DIR / ".env")
 
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key or api_key == "your_api_key_here":
+        try:
+            arvan_config = load_arvan_ai_config()
+        except ValueError as exc:
+            raise CommandError(str(exc)) from exc
+
+        gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not gemini_api_key or gemini_api_key == "your_api_key_here":
             raise CommandError(
-                "GEMINI_API_KEY is not set. Add it to your .env file."
+                "GEMINI_API_KEY is not set. Required for embeddings "
+                "(semantic dedup / news pool). Add it to your .env file."
             )
 
-        model_name = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
-        client = genai.Client(
-            api_key=api_key,
-            http_options=types.HttpOptions(
-                timeout=GEMINI_REQUEST_TIMEOUT * 1000,  # google-genai expects ms
-            ),
-        )
-        generation_config = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.7,
-        )
+        chat_client = ArvanChatClient(arvan_config)
+        model_name = arvan_config.model
         pool_config = load_news_pool_config()
 
-        self.stdout.write(f"Using Gemini model: {model_name}")
+        # Direct Google Gemini client — embeddings only (unchanged from before).
+        embed_client = genai.Client(
+            api_key=gemini_api_key,
+            http_options=types.HttpOptions(
+                timeout=GEMINI_REQUEST_TIMEOUT * 1000,
+            ),
+        )
+
         self.stdout.write(
-            f"Rewrite budget this run: {MAX_REWRITES_PER_RUN} Gemini requests, "
+            f"Rewrite via Arvan AI model: {model_name}"
+        )
+        self.stdout.write(f"Chat endpoint: {arvan_config.chat_url}")
+        self.stdout.write(
+            "Embeddings via Google Gemini (direct API) — unchanged."
+        )
+        self.stdout.write(
+            f"Rewrite budget this run: {MAX_REWRITES_PER_RUN} LLM requests, "
             f"min {GEMINI_MIN_INTERVAL_SECONDS // 60} min between them."
         )
         self.stdout.write(
@@ -282,8 +290,8 @@ class Command(BaseCommand):
             f"cross-source dedup threshold={pool_config.dedup_threshold:.2f}."
         )
 
-        # Per-run counters: at most MAX_REWRITES_PER_RUN Gemini calls.
-        # Already-stored URLs are never sent to Gemini (DB uniqueness).
+        # Per-run counters: at most MAX_REWRITES_PER_RUN LLM calls.
+        # Already-stored URLs are never rewritten again (DB uniqueness).
         self._gemini_requests_done = 0
         self._last_gemini_at: float | None = None
 
@@ -294,7 +302,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.HTTP_INFO(f"  [news-pool] {message}"))
 
         semantic_filter = build_semantic_dedup_filter(
-            client,
+            embed_client,
             log=_dedup_log,
         )
 
@@ -354,9 +362,8 @@ class Command(BaseCommand):
 
             stats = self._process_candidate(
                 candidate,
-                client,
+                chat_client,
                 model_name,
-                generation_config,
                 semantic_filter,
             )
             for key, value in stats.items():
@@ -365,7 +372,7 @@ class Command(BaseCommand):
         if limit_reached:
             self.stdout.write(
                 self.style.WARNING(
-                    f"\nReached rewrite budget ({MAX_REWRITES_PER_RUN} Gemini "
+                    f"\nReached rewrite budget ({MAX_REWRITES_PER_RUN} LLM "
                     "requests). Remaining pool items will wait for the next "
                     "hourly cycle (if still within the lookback window)."
                 )
@@ -412,18 +419,16 @@ class Command(BaseCommand):
     def _process_candidate(
         self,
         candidate: PoolCandidate,
-        client: "genai.Client",
+        chat_client: ArvanChatClient,
         model_name: str,
-        generation_config: "types.GenerateContentConfig",
         semantic_filter: SemanticDedupFilter,
     ) -> dict[str, int]:
-        """Run site semantic-dedup + scrape + Gemini for one pooled candidate."""
+        """Run site semantic-dedup + scrape + Arvan rewrite for one pooled candidate."""
         return self._process_entry(
             candidate.entry,
             candidate.source,
-            client,
+            chat_client,
             model_name,
-            generation_config,
             semantic_filter,
             canonical_url=candidate.canonical_url,
             title=candidate.title,
@@ -433,9 +438,8 @@ class Command(BaseCommand):
         self,
         entry: feedparser.FeedParserDict,
         source: RssSource,
-        client: "genai.Client",
+        chat_client: ArvanChatClient,
         model_name: str,
-        generation_config: "types.GenerateContentConfig",
         semantic_filter: SemanticDedupFilter,
         *,
         canonical_url: str | None = None,
@@ -464,7 +468,7 @@ class Command(BaseCommand):
             )
 
         # Hard guarantee: any URL already in the DB (pending/published/rejected)
-        # is never sent to Gemini again — including on later hourly cycles.
+        # is never sent to the LLM again — including on later hourly cycles.
         if self._article_exists(canonical_url):
             self.stdout.write(
                 f"  - duplicate, skipped: {title[:80]} ({canonical_url})"
@@ -472,7 +476,7 @@ class Command(BaseCommand):
             stats["skipped"] += 1
             return stats
 
-        # Semantic dedup runs BEFORE scrape/Gemini so we avoid expensive work
+        # Semantic dedup runs BEFORE scrape/LLM so we avoid expensive work
         # on stories already covered by Khabar Varzeshi in the last 24 hours.
         match = semantic_filter.check_entry(entry)
         if match.skipped_due_to_error:
@@ -550,13 +554,11 @@ class Command(BaseCommand):
 
         self._gemini_requests_done += 1
         self.stdout.write(self.style.HTTP_INFO(
-            f"  → Gemini request "
+            f"  → Arvan LLM request "
             f"| model={model_name!r} "
             f"| prompt={len(prompt)} chars "
-            f"| timeout={GEMINI_REQUEST_TIMEOUT}s "
-            f"| request={self._gemini_requests_done}/{MAX_REWRITES_PER_RUN} "
-            f"| config={{response_mime_type={generation_config.response_mime_type!r}, "
-            f"temperature={generation_config.temperature}}}"
+            f"| timeout={chat_client.config.timeout_seconds}s "
+            f"| request={self._gemini_requests_done}/{MAX_REWRITES_PER_RUN}"
         ))
 
         # Stamp before the call so spacing is measured between request starts
@@ -564,33 +566,33 @@ class Command(BaseCommand):
         self._last_gemini_at = time.monotonic()
 
         try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config=generation_config,
+            raw_text = chat_client.complete(
+                prompt,
+                temperature=0.7,
+                max_tokens=8000,
+                json_mode=True,
             )
-            raw_text = getattr(response, "text", "") or ""
             if not raw_text.strip():
-                raise ValueError("Empty response from Gemini.")
+                raise ValueError("Empty response from Arvan AI.")
 
             parsed = json.loads(_strip_markdown_fences(raw_text))
             if not isinstance(parsed, dict):
-                raise ValueError("Gemini did not return a JSON object.")
+                raise ValueError("Arvan AI did not return a JSON object.")
 
             missing = [k for k in REQUIRED_KEYS if k not in parsed]
             if missing:
-                raise ValueError(f"Missing keys in Gemini response: {missing}")
+                raise ValueError(f"Missing keys in LLM response: {missing}")
 
             telegram_text = (parsed.get("telegram_text") or "").strip()
             if TELEGRAM_CHANNEL_ID not in telegram_text:
                 telegram_text = f"{telegram_text}\n\n{TELEGRAM_CHANNEL_ID}".strip()
 
-            # Re-check after the (slow) Gemini call — another worker may have
+            # Re-check after the (slow) LLM call — another worker may have
             # inserted the same URL while we were waiting.
             if self._article_exists(canonical_url):
                 self.stdout.write(
                     self.style.WARNING(
-                        f"  - duplicate after Gemini, skipped: {title[:80]} "
+                        f"  - duplicate after LLM, skipped: {title[:80]} "
                         f"({canonical_url})"
                     )
                 )
@@ -623,18 +625,19 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.SUCCESS(
                     f"  + created: {title[:80]} "
-                    f"(Gemini {self._gemini_requests_done}/{MAX_REWRITES_PER_RUN})"
+                    f"(LLM {self._gemini_requests_done}/{MAX_REWRITES_PER_RUN})"
                 )
             )
             stats["created"] += 1
 
         except TIMEOUT_EXCEPTIONS as exc:
             self.stderr.write(self.style.ERROR(
-                f"  ! Gemini ReadTimeout for '{title[:60]}': "
+                f"  ! Arvan LLM failure for '{title[:60]}': "
                 f"type={type(exc).__name__} | message={exc!s}"
             ))
             self.stderr.write(self.style.ERROR(
-                f"    model={model_name!r}, configured timeout={GEMINI_REQUEST_TIMEOUT}s, "
+                f"    model={model_name!r}, "
+                f"timeout={chat_client.config.timeout_seconds}s, "
                 f"prompt size={len(prompt)} chars"
             ))
             self.stderr.write(self.style.ERROR(traceback.format_exc()))
@@ -642,14 +645,14 @@ class Command(BaseCommand):
         except json.JSONDecodeError as exc:
             self.stderr.write(
                 self.style.WARNING(
-                    f"  ! Invalid JSON from Gemini for '{title[:60]}': {exc}. Skipping."
+                    f"  ! Invalid JSON from Arvan AI for '{title[:60]}': {exc}. Skipping."
                 )
             )
             stats["errors"] += 1
         except Exception as exc:
             self.stderr.write(
                 self.style.WARNING(
-                    f"  ! Gemini/processing failure for '{title[:60]}': {exc!r}. Skipping."
+                    f"  ! LLM/processing failure for '{title[:60]}': {exc!r}. Skipping."
                 )
             )
             self.stderr.write(self.style.WARNING(traceback.format_exc()))

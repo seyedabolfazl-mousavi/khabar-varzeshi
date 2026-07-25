@@ -47,7 +47,8 @@ RSS منابع فعال
 ## پیش‌نیازها
 
 - Python 3.11+ (پیشنهادی)
-- حساب [Google AI Studio](https://aistudio.google.com/app/apikey) برای `GEMINI_API_KEY`
+- حساب [Google AI Studio](https://aistudio.google.com/app/apikey) برای `GEMINI_API_KEY` (فقط embeddings)
+- حساب [Arvan Cloud AI](https://arvancloudai.ir) برای بازنویسی (`ARVAN_AI_API_KEY` + URL گیت‌وی)
 - ربات تلگرام از [@BotFather](https://t.me/BotFather)
 - شناسهٔ عددی ادمین(ها) از [@userinfobot](https://t.me/userinfobot)
 - کانال عمومی تلگرام که ربات در آن **ادمین** باشد و اجازهٔ Post Messages داشته باشد
@@ -114,18 +115,23 @@ python manage.py fetch_news
 
 | متغیر | توضیح |
 |--------|--------|
-| `GEMINI_API_KEY` | کلید API جمینای |
+| `GEMINI_API_KEY` | کلید Google Gemini — فقط برای embedding / semantic dedup |
+| `ARVAN_AI_API_KEY` | کلید API ابر آروان (`Authorization: apikey …`) — بازنویسی |
+| `ARVAN_AI_CHAT_URL` | آدرس کامل `.../v1/chat/completions` گیت‌وی مدل |
+| `ARVAN_AI_MODEL` | نام مدل بازنویسی (مثلاً `Gemini-3.1-Flash-Lite-Preview`) |
 | `TELEGRAM_BOT_TOKEN` | توکن ربات از BotFather |
 | `ALLOWED_ADMIN_IDS` | شناسه‌های عددی ادمین، جدا با کاما (مثلاً `123,456`) |
 | `TELEGRAM_PUBLIC_CHANNEL_ID` | کانال عمومی (`@username` یا id عددی مثل `-100...`) |
 
 اگر `ALLOWED_ADMIN_IDS` خالی باشد، از `TELEGRAM_ADMIN_CHAT_ID` به‌عنوان fallback تک‌ادمین استفاده می‌شود.
 
-### اختیاری — Gemini
+### اختیاری — مدل‌ها
 
 | متغیر | پیش‌فرض | توضیح |
 |--------|----------|--------|
-| `GEMINI_MODEL` | `models/gemini-2.5-flash-lite` | مدل بازنویسی متن |
+| `ARVAN_AI_MODEL` | `Gemini-3.1-Flash-Lite-Preview` | مدل بازنویسی از طریق آروان |
+| `ARVAN_AI_TIMEOUT` | `120` | ثانیه |
+| `SEMANTIC_DEDUP_EMBEDDING_MODEL` | `gemini-embedding-001` | مدل embedding مستقیم Gemini |
 
 ### انتشار روی سایت (Newsroom)
 
@@ -142,7 +148,7 @@ python manage.py fetch_news
 
 ### حذف تکراری معنایی (Semantic Dedup)
 
-به‌صورت پیش‌فرض فعال است و از همان `GEMINI_API_KEY` برای embedding استفاده می‌کند.
+به‌صورت پیش‌فرض فعال است و از embedding مستقیم Google Gemini (`GEMINI_API_KEY` + `gemini-embedding-001`) استفاده می‌کند. بازنویسی متن جداگانه از طریق ابر آروان انجام می‌شود.
 
 | متغیر | پیش‌فرض | توضیح |
 |--------|----------|--------|
@@ -401,7 +407,7 @@ python manage.py runserver
 | مشکل | بررسی |
 |------|--------|
 | ربات بالا نمی‌آید | `TELEGRAM_BOT_TOKEN` و `ALLOWED_ADMIN_IDS` / کانال در `.env` |
-| `fetch_news` خطا می‌دهد | `GEMINI_API_KEY` و فعال بودن حداقل یک RssSource |
+| `fetch_news` خطا می‌دهد | `ARVAN_AI_*` (بازنویسی) و `GEMINI_API_KEY` (embedding) و فعال بودن RssSource |
 | خبر جدید نمی‌آید | Worker در حال اجراست؟ منبع RSS درست است؟ semantic dedup همه را رد نمی‌کند؟ |
 | ارسال به کانال شکست می‌خورد | ربات ادمین کانال است؟ `TELEGRAM_PUBLIC_CHANNEL_ID` درست است؟ |
 | انتشار سایت خطا می‌دهد | `NEWSROOM_*`، دسترسی شبکه، و Selenium/Chrome |
