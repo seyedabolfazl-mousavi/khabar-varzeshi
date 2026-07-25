@@ -13,12 +13,12 @@ RSS منابع فعال
         │
         ▼
 ┌───────────────────┐
-│  fetch_news       │  هر ۱ ساعت توسط run_worker (حداکثر ۱۰ خبر، فاصله ≥۵ دقیقه)
-│  • نرمال‌سازی URL │
-│  • حذف تکراری URL │  URL ذخیره‌شده هرگز دوباره به Gemini نمی‌رود
+│  fetch_news       │  هر ۱ ساعت: استخر ۱ساعته → اولویت منابع → تا ۱۰ بازنویسی
+│  • جمع‌آوری RSS  │  فقط اخبار ۱ ساعت اخیر همه منابع در حافظه
+│  • سورت زمانی     │  جدیدترین pub_date اول
+│  • dedupe اولویت  │  خبر یکسان بین منابع → منبع با priority بهتر
 │  • semantic dedup │  مقایسه با RSS ۲۴ ساعت اخیر سایت
-│  • scrape صفحه    │
-│  • بازنویسی Gemini│  → site_title / site_lead / site_body / telegram_text
+│  • scrape + Gemini│  → site_title / site_lead / site_body / telegram_text
 └─────────┬─────────┘
           │ NewsArticle (status=pending)
           ▼
@@ -168,7 +168,7 @@ python manage.py fetch_news
 |--------|--------|
 | `python manage.py run_bot` | اجرای ربات سردبیری (aiogram، long polling). در خطای شبکه بعد از ۱۰ ثانیه دوباره شروع می‌شود. |
 | `python manage.py run_worker` | هر ۱ ساعت `fetch_news`؛ حداکثر ۱۰ بازنویسی Gemini در هر چرخه با فاصلهٔ ≥۵ دقیقه؛ URLهای ذخیره‌شده دوباره بازنویسی نمی‌شوند. اگر خبر جدید pending شود به ادمین‌ها پیام می‌دهد. |
-| `python manage.py fetch_news` | یک‌بار: خواندن RSS فعال‌ها، dedup، scrape، Gemini (سقف ۱۰ + فاصله ۵ دقیقه)، ذخیرهٔ `pending`. |
+| `python manage.py fetch_news` | یک‌بار: استخر ۱ساعته از RSSها، dedupe با اولویت منبع، مقایسه با سایت، Gemini (سقف ۱۰ + فاصله ۵ دقیقه)، ذخیرهٔ `pending`. |
 | `python manage.py remove_duplicate_articles` | حذف ردیف‌های تکراری بر اساس URL نرمال‌شده (قدیمی‌ترین نگه داشته می‌شود). |
 | `python manage.py remove_duplicate_articles --dry-run` | فقط گزارش تکراری‌ها بدون حذف. |
 | `python manage.py runserver` | پنل Django Admin برای مدیریت منابع و اخبار. |
@@ -229,16 +229,25 @@ Gemini در ingestion متن را طوری می‌سازد که با `@KhabarVar
 
 ## جمع‌آوری و بازنویسی (`fetch_news`)
 
-محدودیت‌های هر چرخه (توسط `run_worker` هر ساعت یک‌بار):
+هر سیکل ساعتی این ترتیب را طی می‌کند:
+
+1. **استخر کوتاه‌مدت:** از همهٔ `RssSource` فعال، فقط آیتم‌های با `pub_date` در ۱ ساعت اخیر (قابل تنظیم با `POOL_LOOKBACK_HOURS`)
+2. **حذف URL تکراری DB** و برخورد URL بین فیدها (اولویت بهتر می‌ماند)
+3. **Dedupe بین‌منبعی:** اگر چند منبع همان خبر را پوشش داده باشند (embedding، آستانهٔ پیش‌فرض `0.88`)، فقط منبع با **`priority` کوچک‌تر** نگه داشته می‌شود
+4. **سورت** بر اساس زمان انتشار نزولی (جدیدترین اول)
+5. پردازش تا سقف ۱۰: semantic dedup با سایت خبرورزشی → scrape → Gemini → `pending`
 
 | قانون | مقدار |
 |--------|--------|
-| فاصلهٔ اجرای Worker | هر ۱ ساعت (ربات تلگرام جدا و همیشه روشن است) |
+| فاصلهٔ اجرای Worker | هر ۱ ساعت |
+| پنجرهٔ استخر | ۱ ساعت اخیر |
+| اولویت منبع | عدد کوچک‌تر = بالاتر (پیش‌فرض `100`) |
+| آستانهٔ هم‌داستانی بین منابع | `POOL_DEDUP_THRESHOLD=0.88` |
 | حداکثر درخواست Gemini در هر چرخه | ۱۰ |
 | حداقل فاصله بین دو درخواست Gemini | ۵ دقیقه |
-| بازنویسی دوبارهٔ همان خبر | ممنوع — اگر `original_url` در DB باشد (هر وضعیتی)، به Gemini نمی‌رود |
+| بازنویسی دوبارهٔ همان URL | ممنوع |
 
-برای هر `RssSource` فعال:
+برای هر کاندیدای باقی‌مانده در استخر:
 
 1. پارس RSS با `feedparser`
 2. نرمال‌سازی URL (`normalize_article_url`) و رد کردن URL تکراری در DB
@@ -291,6 +300,7 @@ Gemini در ingestion متن را طوری می‌سازد که با `@KhabarVar
 | `name` | نام منبع |
 | `url` | آدرس RSS (یکتا) |
 | `category` | دسته‌بندی اختیاری |
+| `priority` | عدد کوچک‌تر = اولویت بالاتر هنگام خبر تکراری بین منابع (پیش‌فرض ۱۰۰) |
 | `is_active` | فقط منابع فعال در `fetch_news` خوانده می‌شوند |
 
 ### `NewsArticle`
@@ -355,7 +365,11 @@ khabar_varzeshi/
         ├── run_bot.py
         ├── run_worker.py
         ├── fetch_news.py
-        └── remove_duplicate_articles.py
+        └── ...
+    ├── news_pool/                # استخر کوتاه‌مدت + اولویت منابع
+    │   ├── collect.py
+    │   ├── dedupe.py
+    │   └── config.py
 ```
 
 ---

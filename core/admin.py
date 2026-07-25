@@ -6,10 +6,11 @@ from .models import NewsArticle, RssSource
 
 @admin.register(RssSource)
 class RssSourceAdmin(admin.ModelAdmin):
-    list_display = ("name", "category", "is_active")
+    list_display = ("name", "priority", "category", "is_active")
     list_filter = ("is_active", "category")
     search_fields = ("name", "url")
-    list_editable = ("is_active",)
+    list_editable = ("priority", "is_active")
+    ordering = ("priority", "name")
 
 
 @admin.register(NewsArticle)

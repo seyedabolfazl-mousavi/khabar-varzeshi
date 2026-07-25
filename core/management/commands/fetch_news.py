@@ -1,5 +1,5 @@
-"""Fetch active RSS feeds, rewrite each new article with Gemini, and persist
-the result as a `pending` `NewsArticle`.
+"""Hourly news pool ingestion: collect recent RSS items, priority-dedupe,
+rewrite with Gemini, and persist as pending NewsArticle rows.
 
 Run with:
 
@@ -53,6 +53,12 @@ from requests.exceptions import Timeout as RequestsTimeout
 
 from core.article_scraper import _clean_html_to_text, scrape_article_html
 from core.models import NewsArticle, RssSource
+from core.news_pool import (
+    collect_recent_pool,
+    dedupe_pool_by_priority,
+    load_news_pool_config,
+)
+from core.news_pool.candidates import PoolCandidate
 from core.semantic_dedup import SemanticDedupFilter, build_semantic_dedup_filter
 from core.url_utils import normalize_article_url
 
@@ -236,11 +242,12 @@ def _extract_image_candidates(
 
 class Command(BaseCommand):
     help = (
-        "Fetch every active RSS source, rewrite each new article with Gemini, "
-        "and store the result as a pending NewsArticle. "
-        f"At most {MAX_REWRITES_PER_RUN} new articles are rewritten per run, "
-        f"with ≥{GEMINI_MIN_INTERVAL_SECONDS // 60} minutes between Gemini "
-        "requests. URLs already in the database are never rewritten again."
+        "Collect a 1-hour in-memory RSS pool from all active sources, "
+        "dedupe same stories by source priority, then rewrite newest-first "
+        "with Gemini into pending NewsArticle rows. "
+        f"At most {MAX_REWRITES_PER_RUN} articles per run, "
+        f"≥{GEMINI_MIN_INTERVAL_SECONDS // 60} minutes between Gemini requests. "
+        "URLs already in the database are never rewritten again."
     )
 
     def handle(self, *args: Any, **options: Any) -> None:
@@ -263,10 +270,16 @@ class Command(BaseCommand):
             response_mime_type="application/json",
             temperature=0.7,
         )
+        pool_config = load_news_pool_config()
+
         self.stdout.write(f"Using Gemini model: {model_name}")
         self.stdout.write(
             f"Rewrite budget this run: {MAX_REWRITES_PER_RUN} Gemini requests, "
             f"min {GEMINI_MIN_INTERVAL_SECONDS // 60} min between them."
+        )
+        self.stdout.write(
+            f"News pool: lookback={pool_config.lookback_hours:g}h, "
+            f"cross-source dedup threshold={pool_config.dedup_threshold:.2f}."
         )
 
         # Per-run counters: at most MAX_REWRITES_PER_RUN Gemini calls.
@@ -277,76 +290,84 @@ class Command(BaseCommand):
         def _dedup_log(message: str) -> None:
             self.stdout.write(self.style.HTTP_INFO(f"  [semantic-dedup] {message}"))
 
+        def _pool_log(message: str) -> None:
+            self.stdout.write(self.style.HTTP_INFO(f"  [news-pool] {message}"))
+
         semantic_filter = build_semantic_dedup_filter(
             client,
             log=_dedup_log,
         )
 
-        sources = RssSource.objects.filter(is_active=True)
-        if not sources.exists():
+        sources = list(
+            RssSource.objects.filter(is_active=True).order_by("priority", "name")
+        )
+        if not sources:
             self.stdout.write(self.style.WARNING("No active RSS sources found."))
             return
+
+        # --- Phase 1: short-term pool (last N hours from all feeds) ----------
+        collect_result = collect_recent_pool(
+            sources,
+            config=pool_config,
+            log=_pool_log,
+        )
+
+        # --- Phase 2: same-story collapse by source priority -----------------
+        dedupe_result = dedupe_pool_by_priority(
+            collect_result.candidates,
+            embedding_service=semantic_filter.embedding_service,
+            config=pool_config,
+            log=_pool_log,
+        )
+        queue = dedupe_result.candidates
+
+        self.stdout.write(
+            self.style.MIGRATE_HEADING(
+                f"\n>>> Processing pool "
+                f"({len(queue)} candidates after priority dedupe, "
+                f"newest first)"
+            )
+        )
 
         totals = {
             "created": 0,
             "skipped": 0,
             "semantic_skipped": 0,
             "errors": 0,
+            "pool_dropped": dedupe_result.stats.dropped,
         }
         limit_reached = False
 
-        for source in sources:
+        for index, candidate in enumerate(queue, start=1):
             if self._gemini_requests_done >= MAX_REWRITES_PER_RUN:
                 limit_reached = True
                 break
 
             self.stdout.write(
-                self.style.MIGRATE_HEADING(f"\n>>> {source.name} ({source.url})")
+                self.style.HTTP_INFO(
+                    f"\n  [{index}/{len(queue)}] "
+                    f"{candidate.pub_date.isoformat()} | "
+                    f"p={candidate.priority} | {candidate.source_name} | "
+                    f"{candidate.title[:70]}"
+                )
             )
 
-            try:
-                feed = feedparser.parse(source.url)
-            except Exception as exc:
-                self.stderr.write(
-                    self.style.ERROR(f"  Could not parse feed: {exc!r}")
-                )
-                totals["errors"] += 1
-                continue
-
-            if feed.bozo and not feed.entries:
-                self.stderr.write(
-                    self.style.ERROR(
-                        f"  Feed could not be loaded ({feed.bozo_exception!r})."
-                    )
-                )
-                totals["errors"] += 1
-                continue
-
-            for entry in feed.entries:
-                if self._gemini_requests_done >= MAX_REWRITES_PER_RUN:
-                    limit_reached = True
-                    break
-
-                stats = self._process_entry(
-                    entry,
-                    source,
-                    client,
-                    model_name,
-                    generation_config,
-                    semantic_filter,
-                )
-                for key, value in stats.items():
-                    totals[key] += value
-
-            if limit_reached:
-                break
+            stats = self._process_candidate(
+                candidate,
+                client,
+                model_name,
+                generation_config,
+                semantic_filter,
+            )
+            for key, value in stats.items():
+                totals[key] += value
 
         if limit_reached:
             self.stdout.write(
                 self.style.WARNING(
                     f"\nReached rewrite budget ({MAX_REWRITES_PER_RUN} Gemini "
-                    "requests). Remaining feed entries will wait for the next "
-                    "hourly cycle."
+                    "requests). Remaining pool items will wait for the next "
+                    "hourly cycle (if still within the lookback window)."
                 )
             )
 
@@ -355,7 +376,8 @@ class Command(BaseCommand):
                 "\nDone. "
                 f"Created: {totals['created']}, "
                 f"skipped (URL duplicate): {totals['skipped']}, "
-                f"skipped (semantic): {totals['semantic_skipped']}, "
+                f"skipped (semantic vs site): {totals['semantic_skipped']}, "
+                f"dropped (cross-source pool): {totals['pool_dropped']}, "
                 f"errors: {totals['errors']}."
             )
         )
@@ -387,6 +409,26 @@ class Command(BaseCommand):
         stream.write(style(f"  [{timestamp}] [scrape] {message}") + "\n")
         stream.flush()
 
+    def _process_candidate(
+        self,
+        candidate: PoolCandidate,
+        client: "genai.Client",
+        model_name: str,
+        generation_config: "types.GenerateContentConfig",
+        semantic_filter: SemanticDedupFilter,
+    ) -> dict[str, int]:
+        """Run site semantic-dedup + scrape + Gemini for one pooled candidate."""
+        return self._process_entry(
+            candidate.entry,
+            candidate.source,
+            client,
+            model_name,
+            generation_config,
+            semantic_filter,
+            canonical_url=candidate.canonical_url,
+            title=candidate.title,
+        )
+
     def _process_entry(
         self,
         entry: feedparser.FeedParserDict,
@@ -395,18 +437,22 @@ class Command(BaseCommand):
         model_name: str,
         generation_config: "types.GenerateContentConfig",
         semantic_filter: SemanticDedupFilter,
+        *,
+        canonical_url: str | None = None,
+        title: str | None = None,
     ) -> dict[str, int]:
         stats = {"created": 0, "skipped": 0, "semantic_skipped": 0, "errors": 0}
 
         link = (getattr(entry, "link", "") or "").strip()
-        title = (getattr(entry, "title", "") or "").strip()
+        title = (title or getattr(entry, "title", "") or "").strip()
 
         if not link or not title:
             self.stderr.write(self.style.WARNING("  Skipping entry without link/title."))
             stats["errors"] += 1
             return stats
 
-        canonical_url = normalize_article_url(link)
+        if not canonical_url:
+            canonical_url = normalize_article_url(link)
         if not canonical_url:
             self.stderr.write(self.style.WARNING("  Skipping entry with empty URL."))
             stats["errors"] += 1

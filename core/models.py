@@ -8,11 +8,16 @@ class RssSource(models.Model):
     url = models.URLField(unique=True)
     category = models.CharField(max_length=50, blank=True)
     is_active = models.BooleanField(default=True)
+    # Lower number = higher priority when the same story appears in multiple feeds.
+    priority = models.PositiveIntegerField(
+        default=100,
+        help_text="عدد کوچک‌تر = اولویت بالاتر (۱ بهتر از ۲).",
+    )
 
     class Meta:
         verbose_name = "RSS Source"
         verbose_name_plural = "RSS Sources"
-        ordering = ["name"]
+        ordering = ["priority", "name"]
 
     def __str__(self):
         return self.name
