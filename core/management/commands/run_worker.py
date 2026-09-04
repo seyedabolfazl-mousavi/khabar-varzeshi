@@ -100,8 +100,10 @@ class Command(BaseCommand):
 
                 if new_count > 0:
                     text = (
-                        f"🔔 <b>{new_count} خبر جدید استخراج و بازنویسی شد!</b>\n\n"
-                        f"برای بررسی و تایید، دکمه <b>{CHECK_PENDING_BUTTON}</b> را بزنید "
+                        f"🔔 <b>{new_count} پیشنهاد خبری آماده بررسی است</b>\n\n"
+                        f"موارد کم‌ارتباط توسط عامل حذف شده‌اند؛ "
+                        f"فقط پیشنهادهای منتخب در صف بازبینی هستند.\n\n"
+                        f"برای بررسی، دکمه <b>{CHECK_PENDING_BUTTON}</b> را بزنید "
                         "یا /check_pending را ارسال کنید."
                     )
                     for admin_id in config.allowed_admin_ids:

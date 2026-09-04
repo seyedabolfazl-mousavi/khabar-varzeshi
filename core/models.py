@@ -41,6 +41,10 @@ class NewsArticle(models.Model):
     site_lead = models.TextField(null=True, blank=True)
     site_body = models.TextField(null=True, blank=True)
     telegram_text = models.TextField(null=True, blank=True)
+    # Internal editorial note for admins (why selected / why needs review / reject reason).
+    editorial_note = models.TextField(null=True, blank=True)
+    # full = webpage scrape; rss = RSS-only fallback; blocked = scrape failed.
+    content_status = models.CharField(max_length=20, null=True, blank=True)
     status = models.CharField(
         max_length=20,
         choices=Status.choices,

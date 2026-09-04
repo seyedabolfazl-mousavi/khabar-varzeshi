@@ -56,6 +56,7 @@ from core.news_pool import (
 )
 from core.news_pool.candidates import PoolCandidate
 from core.semantic_dedup import SemanticDedupFilter, build_semantic_dedup_filter
+from core.topic_filter import assess_topic
 from core.url_utils import normalize_article_url
 
 
@@ -81,55 +82,79 @@ TIMEOUT_EXCEPTIONS: tuple[type[BaseException], ...] = (
     ArvanAIRequestError,
 )
 
-# Required JSON keys the Gemini response must contain.
-REQUIRED_KEYS = ("site_title", "site_lead", "site_body", "telegram_text")
+# Keys always required from the LLM.
+REQUIRED_KEYS = (
+    "decision",
+    "selection_reason",
+    "site_title",
+    "site_lead",
+    "site_body",
+    "telegram_text",
+)
+SELECT_DECISIONS = frozenset({"select", "needs_review"})
+VALID_DECISIONS = frozenset({"select", "reject", "needs_review"})
 
 # Matches an opening ``` or ```json fence, and the closing ``` fence.
 _FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
 
 PROMPT_TEMPLATE = """\
-You are the editor-in-chief of a highly prestigious, official, and professional international sports news outlet. Your task is to analyze the raw English news data provided below and rewrite it into a completely new, original, and professionally structured Persian (Farsi) sports news article.
+تو دستیار دبیر «خبرورزشی» هستی. از ورودی معتبر زیر، اول دربارهٔ ارتباط با مخاطب ایرانی تصمیم بگیر، بعد فقط در صورت انتخاب یا نیاز به بررسی، پیش‌نویس فارسی بنویس. اولویت با فوتبال است. کوتاهی تیتر هرگز نباید دقت، روشنی یا وضعیت قطعی/غیرقطعی خبر را مخدوش کند.
 
-⚠️ CRITICAL RULE - ABSOLUTE BAN ON EXAGGERATION AND SENSATIONALISM:
-Do NOT use sensational, exaggerated, or clickbait expressions in Persian such as "بمب نقل‌وانتقالات", "شوک بزرگ", "زلزله", "کولاک", "ترکاند", "انفجار خبری", "همه را شوکه کرد", or similar phrases. Maintain a serious, objective, elegant, and journalistic tone throughout the entire output. Never use slang or informal language.
+## ترتیب تصمیم
+۱) اعتبار و کفایت اطلاعات  ۲) ارتباط با مخاطب ایرانی  ۳) ارزش خبری  ۴) تازگی و تفاوت با خبرهای قبلی  ۵) تیترنویسی.
+تیتر جذاب، خبر نامناسب یا کم‌اطلاع را مناسب نمی‌کند. برای پُرکردن فهرست، خبر ضعیف اضافه نکن.
 
-Return the output EXACTLY as a valid JSON object with NO markdown code fences (do NOT use ```json or ```), and NO extra text before or after the JSON.
+## ارزش خبری
+در "selection_reason" در یک جمله مشخص کن: چه اتفاقی افتاده و چرا برای مخاطب ما مهم است؟ (یا چرا حذف/بررسی لازم است).
+نزدیکی به ایران، پیامد، شهرت نزد مخاطب ایرانی، رقابت، تازگی، بزرگی رویداد و کشش انسانی را بسنج. نام مشهور یا عدد بزرگ به‌تنهایی کافی نیست.
 
-The JSON object must contain ONLY these keys:
+## محدوده انتخاب
+انتخاب کن: فوتبال ایران، تیم ملی و بازیکنان ایرانی؛ لیگ‌های سطح اول انگلیس/اسپانیا/ایتالیا/آلمان/فرانسه؛ مسابقات مهم قاره‌ای و رقابت‌های معتبر ملی.
+در عربستان، ترکیه، پرتغال، هلند، آمریکا و سایر کشورها: فقط ستاره‌ها، تیم‌های مطرح، اتفاق مهم یا ارتباط با فوتبال ایران.
+حذف کن: اخبار معمول دسته‌های پایین، تیم محلی/دانشگاهی/ذخیره/پایه، و خبر روزمره کریکت، فوتبال آمریکایی، بیسبال، هاکی، دوچرخه، تنیس، بسکتبال، والیبال، گلف — مگر استثنای روشن (ایرانی‌ها، رویداد جهانی بزرگ، چهره بسیار مشهور، پیامد ورزشی/اقتصادی/انسانی مهم).
+خبر کاملاً غیرورزشی فقط با اهمیت عمومی استثنایی و با ذکر «خارج از زمین» در selection_reason؛ تغییر ظاهر سلبریتی این شرط را ندارد. ارتباط ورزشی اختراع نکن.
+وجود در خوراک sports مجوز خودکار انتخاب نیست.
 
-- "site_title": A professional, SEO-friendly Persian news title (10-18 words). It must clearly describe the main event without exaggeration or clickbait.
-- "site_lead": A concise professional lead (2-3 sentences) written in formal Persian that immediately summarizes the most important facts of the news.
-- "site_body": The complete news article written in Persian HTML. Use only <h2> and <p> tags. Create meaningful section headings yourself and include at least two <h2> sections. Rewrite the article naturally instead of translating sentence-by-sentence. Do not repeat information.
-- "telegram_text": A professional Telegram news post written specifically for a Persian sports news channel. This is NOT a summary of the website article. Write it as an independent Telegram post with a fast, journalistic rhythm.
+## دقت ادعا و منبع
+وضعیت محتوا: {content_status}
+- اگر content_status برابر rss یا blocked است: فقط به اطلاعات صریح عنوان/خلاصه اتکا کن؛ تحلیل، علت، نقل‌قول تازه، جزئیات قرارداد یا متن بلند نساز. پیش‌نویس را کوتاه و محدود نگه دار و محدودیت را در selection_reason بنویس. اگر اصل ادعا مبهم است decision=needs_review.
+- اگر full است: از متن کامل استفاده کن؛ از URL، تصویر، شهرت رسانه یا دانش قبلی خبر را تکمیل نکن.
+توافق، پیشنهاد، مذاکره، «در آستانه پیوستن»، انتقال نهایی و اعلام رسمی یکسان نیستند. «پیوست» ننویس مگر قطعی باشد. ادعای یک رسانه را اعلام رسمی معرفی نکن.
+مبلغ انتقال را با دستمزد/کل ارزش قرارداد اشتباه نگیر؛ واحد پول، پاداش و «تا سقف» را حفظ کن. قرضی‌بودن و اختیار/الزام خرید را حذف نکن.
+ادعا یا اتهام را واقعیت اثبات‌شده ننویس. نام تیم/بازیکن/لیگ/زمان را دقیق نگه دار.
 
-Telegram post requirements:
-- Start with a short, professional headline.
-- Continue with one short paragraph explaining the main news.
-- If the news contains an important official quote, include only the most important quotation.
-- If the news is about a match, clearly display the final score.
-- If the news is about a transfer, injury, suspension, contract, or official announcement, emphasize the main fact.
-- Keep the total length between approximately 40 and 120 Persian words.
-- Use short paragraphs for easy reading.
-- Use at most two clean emojis such as ⚽ or 📌.
-- Do NOT use hashtags.
-- Do NOT use HTML.
-- End with a new line containing exactly:
-"{channel_id}"
+## تیتر (site_title)
+یک تیتر مستقل فارسی؛ معمولاً ۳ تا ۷ کلمه و در صورت نیاز تا حدود ۹ کلمه. برای کوتاه‌کردن، نام ضروری را حذف نکن.
+کاربرد محدود «/»: فقط اگر تیتر خیلی کوتاه برای فهم دقیق به توضیح نیاز دارد، پس از «/» جمله‌ای با فعل در حدود ۶ تا ۸ کلمه بیاور؛ بخش دوم بخش اول را تکرار نکند. تیتر کامل ۸–۹ کلمه‌ای معمولاً بخش دوم نمی‌خواهد.
+اصل اتفاق، تغییر، عدد معنادار یا پیامد مستند را جلو بیاور. به‌جای نام کم‌شناخته، سمت آشنا و دقیق بنویس (مثل «مالک آرسنال»، «مدیر اجرایی لالیگا»)؛ نام کامل در لید/متن بماند. نام ستاره‌های شناخته‌شده را حذف نکن. «منچستر» را به‌جای نام دقیق باشگاه ننویس.
+شروع‌هایی مثل «بررسی وضعیت»، «تحلیلی بر»، «گزارش تحولات» و عبارت‌های اداری مثل «با هدف تقویت ترکیب»، «در راستای»، «موفق به جذب شد» را مگر ضروری حذف کن.
+«بمب»، «شوک»، «زلزله»، «باورنکردنی» الزامی نیستند؛ فقط برای اتفاق واقعاً بزرگ با شواهد روشن و بدون تکرار در بسته. «فوری» فقط برای تحول واقعاً فوری.
+«چرا/چگونه» فقط وقتی متن پاسخ مستند دارد. نتیجه یا علت بیرون از متن اضافه نکن.
+منبع، URL، نام رسانه، هشتگ و ایموجی داخل تیتر نباشد.
 
-Strict Language Rules:
-1. DO NOT translate sentence-by-sentence. Fully understand the original news first, then write a completely new Persian article using natural journalistic language.
-2. The output must be written almost entirely in Persian.
-3. Convert all player names, coach names, club names, competition names, organization names, country names, and common sports abbreviations into their accepted Persian forms whenever possible.
-4. Never leave personal names in English. Example: Lionel Messi → لیونل مسی، Thomas Tuchel → توماس توخل.
-5. Never leave club names in English. Example: Manchester United → منچستر یونایتد.
-6. Never leave competition names in English. Example: Champions League → لیگ قهرمانان اروپا.
-7. Use English only when it is an official trademark or brand name with no accepted Persian equivalent.
-8. Use Persian punctuation and natural Persian writing style.
-9. Ensure all double quotes inside JSON strings are properly escaped so the output is always valid JSON.
+## لید و متن سایت
+- site_lead: ۲–۳ جمله رسمی فارسی؛ مهم‌ترین واقعیت‌ها؛ جزئیات تکمیلی اینجا بیاید نه در تیتر.
+- site_body: HTML فارسی فقط با <h2> و <p>؛ حداقل دو <h2> وقتی محتوا کافی است. بازنویسی طبیعی، نه ترجمه جمله‌به‌جمله. تکرار نکن. اگر محتوا ناقص است، کوتاه بنویس و بخش‌های تحلیلی اختراع نکن.
+
+## تلگرام (telegram_text)
+پست مستقل کانال ورزشی فارسی (نه خلاصه سایت): تیتر کوتاه + پاراگراف کوتاه؛ نقل‌قول فقط اگر مهم؛ نتیجه بازی را روشن بنویس؛ انتقال/مصدومیت/قرارداد را برجسته کن؛ حدود ۴۰–۱۲۰ کلمه؛ حداکثر دو ایموجی مثل ⚽ یا 📌؛ بدون هشتگ و بدون HTML؛ در خط آخر دقیقاً:
+{channel_id}
+
+## زبان
+تقریباً تمام خروجی فارسی. نام بازیکن/مربی/باشگاه/رقابت را به صورت پذیرفته‌شده فارسی بنویس (لیونل مسی، منچستر یونایتد، لیگ قهرمانان اروپا). انگلیسی فقط برای برند بدون معادل فارسی. رقم فارسی، نیم‌فاصله طبیعی. نقل‌قول‌های داخل JSON را escape کن.
+
+## خروجی JSON (فقط همین کلیدها؛ بدون markdown و بدون متن اضافه)
+- "decision": یکی از select | reject | needs_review
+- "selection_reason": دلیل کوتاه تحریریه به فارسی (چرا مهم / چرا حذف / چرا نیازمند بررسی)
+- "site_title": تیتر فارسی (برای reject خالی بگذار "")
+- "site_lead": لید (برای reject خالی)
+- "site_body": بدنه HTML سایت (برای reject خالی)
+- "telegram_text": متن تلگرام (برای reject خالی؛ برای select/needs_review با {channel_id} در انتها)
 
 ---
 Original Title: {title}
 Source: {source_name}
+Content status: {content_status}
 Raw Content:
 {content}
 ---
@@ -339,6 +364,8 @@ class Command(BaseCommand):
 
         totals = {
             "created": 0,
+            "rejected_by_llm": 0,
+            "topic_skipped": 0,
             "skipped": 0,
             "semantic_skipped": 0,
             "errors": 0,
@@ -381,7 +408,9 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 "\nDone. "
-                f"Created: {totals['created']}, "
+                f"Created (pending): {totals['created']}, "
+                f"rejected by editorial filter: {totals['rejected_by_llm']}, "
+                f"skipped (topic prefilter): {totals['topic_skipped']}, "
                 f"skipped (URL duplicate): {totals['skipped']}, "
                 f"skipped (semantic vs site): {totals['semantic_skipped']}, "
                 f"dropped (cross-source pool): {totals['pool_dropped']}, "
@@ -445,7 +474,14 @@ class Command(BaseCommand):
         canonical_url: str | None = None,
         title: str | None = None,
     ) -> dict[str, int]:
-        stats = {"created": 0, "skipped": 0, "semantic_skipped": 0, "errors": 0}
+        stats = {
+            "created": 0,
+            "rejected_by_llm": 0,
+            "topic_skipped": 0,
+            "skipped": 0,
+            "semantic_skipped": 0,
+            "errors": 0,
+        }
 
         link = (getattr(entry, "link", "") or "").strip()
         title = (title or getattr(entry, "title", "") or "").strip()
@@ -500,6 +536,34 @@ class Command(BaseCommand):
                 f"| {match.detail}"
             ))
 
+        rss_summary = ""
+        try:
+            rss_summary = _clean_html_to_text(
+                getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
+            )
+        except Exception:
+            rss_summary = ""
+
+        topic = assess_topic(title, rss_summary)
+        if topic.skip:
+            self.stdout.write(self.style.WARNING(
+                f"  - topic prefilter skip: {title[:80]} | {topic.reason}"
+            ))
+            # Persist as rejected so the URL is not reconsidered every cycle.
+            try:
+                NewsArticle.objects.create(
+                    source=source,
+                    original_title=title[:255],
+                    original_url=canonical_url,
+                    editorial_note=f"حذف پیش‌فیلتر موضوع: {topic.reason}",
+                    content_status="prefilter",
+                    status=NewsArticle.Status.REJECTED,
+                )
+            except IntegrityError:
+                pass
+            stats["topic_skipped"] += 1
+            return stats
+
         raw_html, content_source, scrape_detail = scrape_article_html(
             link, canonical_url, entry, scrape_log=self._scrape_log,
         )
@@ -507,9 +571,17 @@ class Command(BaseCommand):
         if not clean_text:
             clean_text = title
 
+        if content_source == "webpage":
+            content_status = "full"
+        elif content_source == "rss":
+            content_status = "rss"
+        else:
+            content_status = "blocked"
+
         self.stdout.write(self.style.HTTP_INFO(
             f"  → article content "
             f"| source={content_source} "
+            f"| status={content_status} "
             f"| html={len(raw_html)} chars "
             f"| text={len(clean_text)} chars"
             + (f" | {scrape_detail}" if scrape_detail and content_source == "webpage" else "")
@@ -547,6 +619,7 @@ class Command(BaseCommand):
             channel_id=TELEGRAM_CHANNEL_ID,
             title=title,
             source_name=source.name,
+            content_status=content_status,
             content=clean_text[:8000],
         )
 
@@ -568,7 +641,7 @@ class Command(BaseCommand):
         try:
             raw_text = chat_client.complete(
                 prompt,
-                temperature=0.7,
+                temperature=0.5,
                 max_tokens=8000,
                 json_mode=True,
             )
@@ -583,9 +656,40 @@ class Command(BaseCommand):
             if missing:
                 raise ValueError(f"Missing keys in LLM response: {missing}")
 
+            decision = str(parsed.get("decision") or "").strip().lower()
+            if decision not in VALID_DECISIONS:
+                raise ValueError(f"Invalid decision from LLM: {decision!r}")
+
+            selection_reason = (parsed.get("selection_reason") or "").strip()
             telegram_text = (parsed.get("telegram_text") or "").strip()
-            if TELEGRAM_CHANNEL_ID not in telegram_text:
-                telegram_text = f"{telegram_text}\n\n{TELEGRAM_CHANNEL_ID}".strip()
+            site_title = (parsed.get("site_title") or "").strip()
+            site_lead = (parsed.get("site_lead") or "").strip()
+            site_body = (parsed.get("site_body") or "").strip()
+
+            if decision in SELECT_DECISIONS:
+                if not site_title or not telegram_text:
+                    raise ValueError(
+                        f"decision={decision} requires site_title and telegram_text"
+                    )
+                if TELEGRAM_CHANNEL_ID not in telegram_text:
+                    telegram_text = f"{telegram_text}\n\n{TELEGRAM_CHANNEL_ID}".strip()
+                if decision == "needs_review" and selection_reason:
+                    editorial_note = f"نیازمند بررسی: {selection_reason}"
+                elif selection_reason:
+                    editorial_note = f"چرا مهم: {selection_reason}"
+                else:
+                    editorial_note = None
+                article_status = NewsArticle.Status.PENDING
+            else:
+                editorial_note = (
+                    f"حذف عامل: {selection_reason}" if selection_reason
+                    else "حذف عامل: نامرتبط یا کم‌ارزش برای مخاطب"
+                )
+                article_status = NewsArticle.Status.REJECTED
+                site_title = site_title or None
+                site_lead = None
+                site_body = None
+                telegram_text = None
 
             # Re-check after the (slow) LLM call — another worker may have
             # inserted the same URL while we were waiting.
@@ -605,12 +709,14 @@ class Command(BaseCommand):
                     source=source,
                     original_title=title[:255],
                     original_url=canonical_url,
-                    image_url=(image_url or None),
-                    site_title=(parsed.get("site_title") or "").strip()[:255] or None,
-                    site_lead=(parsed.get("site_lead") or "").strip() or None,
-                    site_body=(parsed.get("site_body") or "").strip() or None,
+                    image_url=(image_url or None) if decision in SELECT_DECISIONS else None,
+                    site_title=(site_title[:255] if site_title else None),
+                    site_lead=site_lead or None,
+                    site_body=site_body or None,
                     telegram_text=telegram_text or None,
-                    status=NewsArticle.Status.PENDING,
+                    editorial_note=editorial_note,
+                    content_status=content_status,
+                    status=article_status,
                 )
             except IntegrityError:
                 self.stdout.write(
@@ -622,13 +728,24 @@ class Command(BaseCommand):
                 stats["skipped"] += 1
                 return stats
 
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"  + created: {title[:80]} "
-                    f"(LLM {self._gemini_requests_done}/{MAX_REWRITES_PER_RUN})"
+            if decision in SELECT_DECISIONS:
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"  + created ({decision}): {title[:80]} "
+                        f"(LLM {self._gemini_requests_done}/{MAX_REWRITES_PER_RUN})"
+                    )
                 )
-            )
-            stats["created"] += 1
+                if selection_reason:
+                    self.stdout.write(f"      reason: {selection_reason[:160]}")
+                stats["created"] += 1
+            else:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"  - editorial reject: {title[:80]} "
+                        f"| {selection_reason[:120]}"
+                    )
+                )
+                stats["rejected_by_llm"] += 1
 
         except TIMEOUT_EXCEPTIONS as exc:
             self.stderr.write(self.style.ERROR(

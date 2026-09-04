@@ -30,6 +30,7 @@ class NewsArticleAdmin(admin.ModelAdmin):
                 "source", "status", "created_at",
                 "original_title", "original_url",
                 "image_url", "image_preview",
+                "content_status", "editorial_note",
             ),
         }),
         ("بازنویسی شده با Gemini", {

@@ -6,6 +6,8 @@ from core.article_scraper import (
     extract_article_body_html,
     primary_article_url,
 )
+from core.bot.services import _site_body_as_plain_text
+from core.topic_filter import assess_topic
 from core.url_utils import normalize_article_url
 
 
@@ -48,3 +50,34 @@ class PageSourceValidationTests(SimpleTestCase):
         body = extract_article_body_html(page)
         self.assertIn("story-text", body)
         self.assertGreater(len(body), 100)
+
+
+class TopicFilterTests(SimpleTestCase):
+    def test_skips_routine_nfl_without_exception(self):
+        result = assess_topic("NFL injury report: three starters ruled out")
+        self.assertTrue(result.skip)
+
+    def test_keeps_arsenal_owner_baseball_story(self):
+        result = assess_topic(
+            "Arsenal owner buys Major League Baseball franchise"
+        )
+        self.assertFalse(result.skip)
+
+    def test_skips_non_sport_celebrity(self):
+        result = assess_topic("Nicole Kidman reveals new look at movie premiere")
+        self.assertTrue(result.skip)
+
+    def test_keeps_premier_league_transfer(self):
+        result = assess_topic(
+            "Manchester City close to signing Enzo Fernandez from Chelsea"
+        )
+        self.assertFalse(result.skip)
+
+
+class SiteBodyPreviewTests(SimpleTestCase):
+    def test_strips_html_tags_for_operator_preview(self):
+        raw = "<h2>عنوان</h2><p>متن خبر درباره انتقال.</p>"
+        plain = _site_body_as_plain_text(raw)
+        self.assertNotIn("<", plain)
+        self.assertIn("عنوان", plain)
+        self.assertIn("متن خبر", plain)

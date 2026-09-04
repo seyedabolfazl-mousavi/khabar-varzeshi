@@ -22,7 +22,7 @@ PENDING_BATCH_SIZE = 20
 DIGEST_PAGE_SIZE = 10
 DIGEST_LOOKBACK_HOURS = 24
 DIGEST_LEAD_MAX_CHARS = 160
-DIGEST_HEADER = "۱۰ خبر برگزیده ۲۴ ساعت اخیر از منابع منتخب"
+DIGEST_HEADER = "خبرهای برگزیده ۲۴ ساعت اخیر از منابع منتخب"
 NEWS_DEEP_LINK_PREFIX = "news_"
 _PERSIAN_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
 TELEGRAM_CAPTION_LIMIT = 1024
@@ -36,6 +36,8 @@ _ARTICLE_BOT_FIELDS = (
     "site_title",
     "site_lead",
     "site_body",
+    "editorial_note",
+    "content_status",
     "status",
     "original_title",
     "original_url",
@@ -145,8 +147,9 @@ def format_digest_message(
     """Build the numbered digest list shown to admins.
 
     Format per item:
-        N- <a href="bot deep link">Title</a> / <a href="original">Source</a>
+        N- <a href="bot deep link">Title</a>
         lead…
+        منبع: <a href="original">Source</a>
 
     Never hard-truncates the final HTML string (that breaks Telegram ``<a>`` tags).
     Fits under the message limit by shortening leads instead.
@@ -189,8 +192,9 @@ def format_digest_message(
             lead = _truncate_plain(article.site_lead or "", lead_max)
             lead_html = html.escape(lead, quote=False) if lead else "—"
 
-            lines.append(f"{number}- {title_html} / {source_html}")
+            lines.append(f"{number}- {title_html}")
             lines.append(lead_html)
+            lines.append(f"منبع: {source_html}")
             lines.append("")
 
         return "\n".join(lines).rstrip()
@@ -312,12 +316,28 @@ def format_article_message(
 ) -> str:
     title = html.escape(article.site_title or article.original_title or "—")
     lead = html.escape(article.site_lead or "—")
-    site_body = html.escape((article.site_body or "").strip() or "—")
+    # Never show raw HTML tags in the operator preview.
+    site_body = html.escape(_site_body_as_plain_text(article.site_body))
     telegram_text = _format_telegram_preview(article.telegram_text)
     source_link = _format_source_link(article)
+    note = (article.editorial_note or "").strip()
+    note_block = (
+        f"📌 <b>یادداشت تحریریه:</b> {html.escape(note)}\n\n" if note else ""
+    )
+    content_status = (article.content_status or "").strip()
+    status_block = ""
+    if content_status and content_status != "full":
+        status_label = {
+            "rss": "فقط خلاصه RSS — جزئیات را با منبع چک کنید",
+            "blocked": "متن کامل در دسترس نبود",
+            "prefilter": "حذف پیش‌فیلتر موضوع",
+        }.get(content_status, content_status)
+        status_block = f"⚠️ <b>وضعیت محتوا:</b> {html.escape(status_label)}\n\n"
 
     header = (
         f"📰 <b>تیتر:</b> {title}\n\n"
+        f"{note_block}"
+        f"{status_block}"
         f"📝 <b>لید:</b> {lead}\n\n"
         f"📄 <b>متن سایت:</b>\n{site_body}\n\n"
         f"📱 <b>تلگرام:</b>\n{telegram_text}\n\n"
@@ -333,6 +353,8 @@ def format_article_message(
     # Preserve title/lead/telegram/source; shrink the site-body block to fit.
     prefix = (
         f"📰 <b>تیتر:</b> {title}\n\n"
+        f"{note_block}"
+        f"{status_block}"
         f"📝 <b>لید:</b> {lead}\n\n"
         f"📄 <b>متن سایت:</b>\n"
     )

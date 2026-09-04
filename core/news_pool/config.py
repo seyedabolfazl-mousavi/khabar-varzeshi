@@ -6,7 +6,8 @@ import os
 from dataclasses import dataclass
 
 
-DEFAULT_LOOKBACK_HOURS = 1
+# Floating 24h window aligned with editorial guidance (not calendar day).
+DEFAULT_LOOKBACK_HOURS = 24
 DEFAULT_DEDUP_THRESHOLD = 0.88
 
 
