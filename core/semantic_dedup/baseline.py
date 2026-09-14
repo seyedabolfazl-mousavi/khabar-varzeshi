@@ -1,4 +1,4 @@
-"""Fetch and cache 24-hour baseline articles from the Khabar Varzeshi RSS feed."""
+"""Fetch and cache 24-hour baseline articles from the site's own RSS feed."""
 
 from __future__ import annotations
 

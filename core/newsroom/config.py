@@ -36,11 +36,11 @@ def load_newsroom_config() -> NewsroomConfig:
     return NewsroomConfig(
         login_url=os.getenv(
             "NEWSROOM_LOGIN_URL",
-            "https://newsroom.khabarvarzeshi.com/login/login.xhtml",
+            "https://newsroom.tazenews.com/login/login.xhtml",
         ),
         create_url=os.getenv(
             "NEWSROOM_CREATE_URL",
-            "https://newsroom.khabarvarzeshi.com/news.xhtml",
+            "https://newsroom.tazenews.com/news.xhtml",
         ),
         username=username,
         password=password,

@@ -15,7 +15,7 @@ from core.semantic_dedup.embeddings import (
 )
 
 
-DEFAULT_BASELINE_RSS_URL = "https://www.khabarvarzeshi.com/rss"
+DEFAULT_BASELINE_RSS_URL = "https://www.tazenews.com/rss/tp/4"
 DEFAULT_EMBEDDING_MODEL = "gemini-embedding-001"
 DEFAULT_SIMILARITY_THRESHOLD = 0.80
 DEFAULT_OUTPUT_DIMENSIONALITY = 768

@@ -1,4 +1,4 @@
-"""Selenium automation for the Khabar Varzeshi newsroom dashboard."""
+"""Selenium automation for the newsroom dashboard (TazeNews / Khabar Varzeshi)."""
 
 from __future__ import annotations
 
@@ -49,11 +49,24 @@ class SELECTORS:
         "#newsForm\\:newsTab\\:newsBodyPanel iframe.cke_wysiwyg_frame",
     )
 
-    BTN_SELECT_IMAGE = (By.ID, "newsForm:newsTab:j_id_ey")
+    CREATE_NEWS_MENU = (
+        By.XPATH,
+        "//a[@title='تولید خبر' or normalize-space(.)='تولید خبر'"
+        " or .//span[normalize-space(.)='تولید خبر']]"
+        " | //a[contains(@href,'/news.xhtml') and "
+        "(contains(@title,'تولید خبر') or "
+        ".//span[contains(normalize-space(.),'تولید خبر')])]",
+    )
+    BTN_SELECT_IMAGE = (By.ID, "newsForm:newsTab:j_id_cv")
     XPATH_SELECT_IMAGE = (
         By.XPATH,
         "//button[contains(.,'انتخاب عکس')]"
         " | //span[contains(.,'انتخاب عکس')]/ancestor::button[1]",
+    )
+    XPATH_SAVE_HISTORY = (
+        By.XPATH,
+        "//button[@id='newsForm:newsTab:btnSaveHistoryBaseNews']"
+        " | //button[.//span[contains(normalize-space(.),'ثبت در تاریخچه')]]",
     )
     IMAGE_UPLOAD_TAB = (By.ID, "j_id_58:mediaTab:upload_header")
     XPATH_UPLOAD_TAB = (By.XPATH, "//a[contains(text(), 'آپلود')]")
@@ -414,9 +427,46 @@ class NewsroomAutomation:
                 lambda d: "login" not in d.current_url.lower()
             )
 
+    def _expand_side_menu_if_needed(self, driver: webdriver.Chrome) -> None:
+        """PrimeFaces side menu keeps items hidden until the section is opened."""
+        try:
+            link = driver.find_element(*SELECTORS.CREATE_NEWS_MENU)
+            if link.is_displayed():
+                return
+        except WebDriverException:
+            pass
+
+        for header_text in ("خبر",):
+            headers = driver.find_elements(
+                By.XPATH,
+                f"//li[contains(@class,'ui-widget-header')]"
+                f"[.//h3[contains(normalize-space(.),'{header_text}')]]"
+                f" | //h3[contains(normalize-space(.),'{header_text}')]",
+            )
+            for header in headers:
+                try:
+                    if header.is_displayed():
+                        driver.execute_script(
+                            "arguments[0].scrollIntoView({block:'center'});",
+                            header,
+                        )
+                        header.click()
+                        self._micro_pause()
+                        return
+                except WebDriverException:
+                    continue
+
     def _go_to_create_news(self, driver: webdriver.Chrome) -> None:
         with self._tracked_step("Navigate to Create News", driver):
-            driver.get(self.config.create_url)
+            try:
+                self._expand_side_menu_if_needed(driver)
+                self._click_when_ready(driver, SELECTORS.CREATE_NEWS_MENU)
+            except (TimeoutException, WebDriverException):
+                logger.warning(
+                    "Could not click 'تولید خبر' menu — opening create URL directly"
+                )
+                driver.get(self.config.create_url)
+
             self._wait_for(driver).until(
                 EC.presence_of_element_located(SELECTORS.HEADLINE)
             )
@@ -603,5 +653,8 @@ class NewsroomAutomation:
 
     def _save_news(self, driver: webdriver.Chrome) -> None:
         with self._tracked_step("Save News", driver):
-            self._click_when_ready(driver, SELECTORS.BTN_SAVE)
+            try:
+                self._click_when_ready(driver, SELECTORS.BTN_SAVE)
+            except TimeoutException:
+                self._click_when_ready(driver, SELECTORS.XPATH_SAVE_HISTORY)
             self._micro_pause()

@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"><head id="j_id_3"><link type="text/css" rel="stylesheet" href="/javax.faces.resource/theme.css.xhtml?ln=primefaces-saga&amp;v=14.0.9" /><link type="text/css" rel="stylesheet" href="/javax.faces.resource/primeicons/primeicons.css.xhtml?ln=primefaces&amp;v=14.0.9" /><link rel="stylesheet" type="text/css" href="/javax.faces.resource/theme.css.xhtml?ln=primefaces-saga&amp;v=14.0.9" /><script type="text/javascript" src="/javax.faces.resource/jquery/jquery.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><link rel="stylesheet" type="text/css" href="/javax.faces.resource/components.css.xhtml?ln=primefaces&amp;v=14.0.9" /><script type="text/javascript" src="/javax.faces.resource/jquery/jquery-plugins.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script type="text/javascript" src="/javax.faces.resource/core.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script type="text/javascript" src="/javax.faces.resource/components.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script type="text/javascript" src="/javax.faces.resource/touch/touchswipe.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script type="text/javascript" src="/javax.faces.resource/inputnumber/inputnumber.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><link rel="stylesheet" type="text/css" href="/javax.faces.resource/inputnumber/inputnumber.css.xhtml?ln=primefaces&amp;v=14.0.9" /><script type="text/javascript" src="/javax.faces.resource/hotkey/hotkey.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><link rel="stylesheet" type="text/css" href="/javax.faces.resource/fileupload/fileupload.css.xhtml?ln=primefaces&amp;v=14.0.9" /><script type="text/javascript" src="/javax.faces.resource/fileupload/fileupload.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script type="text/javascript" src="/javax.faces.resource/filedownload/filedownload.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script src="/javax.faces.resource/validation/validation.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script src="/javax.faces.resource/moment/moment.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script src="/javax.faces.resource/validation/validation.bv.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script src="/javax.faces.resource/locales/locale-fa.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script type="text/javascript">if(window.PrimeFaces){PrimeFaces.settings.locale='fa';PrimeFaces.settings.viewId='/news.xhtml';PrimeFaces.settings.contextPath='';PrimeFaces.settings.cookiesSecure=false;PrimeFaces.settings.validateEmptyFields=true;PrimeFaces.settings.considerEmptyStringNull=true;}</script>
+    <title>صبا - تازه نیوز</title>
+
+    <meta http-equiv="cache-control" content="no-cache" />
+    <meta name="generator" content="Saba Enterprise Newsroom (www.nastooh.ir)" />
+    <link href="/res/css/bootstrap.css?_=20250118" rel="stylesheet" />
+    
+    <script type="text/javascript" src="/res/js/datepicker/jdate.min.js"></script>
+    <script type="text/javascript" src="/res/js/datepicker/persian-date.min.js"></script>
+    <script type="text/javascript" src="/res/js/datepicker/persian-datepicker.min.js"></script>
+    <script type="text/javascript" src="/res/js/newsroom.js?__=20250118"></script>
+    <script type="text/javascript" src="/res/jwplayer/jwplayer.js"></script>
+    
+    <link href="/res/font/fontawesome/css/all.min.css?_=20250118" rel="stylesheet" />
+
+    <link href="/res/css/datepicker/persian-datepicker.min.css" rel="stylesheet" />
+    <link href="/res/css/layout.css" type="text/css" rel="stylesheet" />
+    <link href="/res/css/newsroom.css?_=20250118" type="text/css" rel="stylesheet" />
+    <style type="text/css">
+    body, div, span, a, td, select, option, input, textarea, b, i, label, h1, h2, h3, h4, h5, h6,
+    .ui-widget input, .ui-widget textarea, .ui-widget option, .ui-widget select, .ui-widget button, .ui-widget,
+    body .ui-widget:not(.pi), body .ui-widget .ui-widget:not(.pi), .ui-widget .ui-widget,
+    .cke_reset_all, .cke_reset_all *,
+    .select2-search-field input
+    {
+        font-family: Vazir, Tahoma, Arial, sans;
+    }
+    input.datePicker
+    {
+        font-family: Vazir, Tahoma, Arial, sans !important; /* used for datePickers in mediaSearchPart */
+    }
+    body, div, span, a, td, select, input, textarea, label {
+        font-size: 14px;
+    }
+    </style>
+    
+    <script type="text/javascript">
+    //<![CDATA[
+    // autoclose PF lightbox on escape
+    var obtainConf = function(passedConf, dis, defConf) {
+        var data = $(dis).attr('data-select2-conf');
+        var _conf = (typeof data !== "undefined") ? JSON.parse(data) : {};
+        defConf = $.extend({}, defConf); // keep original global defaultSelect2Conf unchanged
+        var conf = $.extend(defConf, _conf);
+        return $.extend(conf, passedConf); // override with passed config parameter
+    }
+    var defaultSelect2Conf = {'maxSelectionSize': 0, 'minInputLength': 0, 'single': true, 'entity': 'keyword', 'groupBy': 'news', 'allowClear': true, 'exactField': null, 'padValue': null};
+    /**
+     * Accepted classes are:
+     * - keywordEntity, regionEntity
+     * - minInputLength_0 (how much character should be typed to initiate ajax search)
+     * - singleSelect (makes select2 single select)
+     * - groupByMedia (if set, groups result by media, otherwise by news)
+     */
+    function initSelect2(cnf) {
+      // conf = $.extend(defaultConf, conf)
+      var uuid = 0;
+      var confArr = [];
+      $('input.installSelect2').each(function(i, s2) {
+        var conf = obtainConf(cnf, this, defaultSelect2Conf);
+        /* var classes = $(this).attr('class').split(/\s+/);
+        var ent;
+        for (i = 0; i < classes.length; i++) {
+          c = classes[i];
+          if (/\w+Entity$/g.test(c)) {
+            ent = c.substring(0, c.length - 6);
+            break;
+          }
+        } */
+      	// var ent = $(this).hasClass('keywordEntity') ? 'keyword' : 'region';
+      	// var single = $(this).hasClass('singleSelect');
+        var pageSize = 25;
+        $(this).select2({
+          placeholder: $(this).attr('placeholder'),
+          minimumInputLength: conf.minInputLength,
+          maximumSelectionSize: conf.maxSelectionSize,
+          formatSelectionTooBig: function(maxSize) { return 'حداکثر اقلام انتخاب شده'.concat(': ').concat(maxSize); },
+          formatSearching: function() { return 'در حال جستجو...'; },
+          formatLoadMore: function(page) { return 'در حال بازیابی...'; },
+          formatAjaxError: function(jqXHR, textStatus, errorThrown) { return 'عملیات ناموفق بود'; },
+          allowClear: conf.allowClear,
+          multiple: !conf.single,
+          initSelection: function(element, callback) {
+            var ids = $(element).val();
+            if (ids !== "") {
+                $.ajax("/rest/entityById", {
+                  data: {
+                    ids: ids,
+                    e: conf.entity,
+                    single: conf.single,
+                    co: conf.groupBy, // count over (group by)
+                  },
+                  dataType: "jsonp"
+                }).done(function(data) { callback(data); });
+            }
+          },
+          ajax: { // instead of writing the function to execute the request we use Select2's convenient helper
+            url: "/rest/entityByTitle",
+            dataType: 'jsonp',
+            quietMillis: 500,
+            data: function (term, page) { // page is the one-based page number tracked by Select2
+            	console.log(term);
+                // try { term = jQuery(term).text(); } catch(e) {}
+                conf = obtainConf(cnf, this[0], defaultSelect2Conf);
+                var isExact = conf.exactField ? $(conf.exactField).is(':checked') : false;
+                return {
+                  t: term, // search term
+                  size: pageSize, // page size
+                  fromPage: page, // page number
+                  e: conf.entity,
+                  co: conf.groupBy, // count over (group by)
+                  ex: isExact
+                };
+            },
+            results: function (data, page, query) {
+                var more = (page * pageSize) < data.total; // whether or not there are more results available
+                // notice we return the value of more so Select2 knows if more results can be loaded
+                if (conf.padValue != null && data.result != null) {
+                	$(data.result).each(function() {
+                		this.id = conf.padValue + this.id + conf.padValue;
+                	});
+                }
+                return {results: data.result, more: more};
+            }
+          },
+          formatNoMatches: function(term) {
+            if (conf.entity != 'keyword' || !false) return 'داده‌ای یافت نشد';
+            // Add the AJAX behavior to the anchor, but do it asynchronously
+            // This way we give time to select2 to render the layout before we configure it
+            // try { term = jQuery(term).text(); } catch(e) {}
+            uuid++;
+            setTimeout(function() {
+                $('#' + uuid + '-ajax-anchor').on('click', function(e) {
+                    var target = $(e.target);
+                    $.ajax({
+                        url: "/rest/addEntity",
+                        dataType: 'jsonp',
+                        type: 'POST',
+                        data: {
+                          	e: conf.entity,
+                            name: term
+                        },
+                    }).done(function(resp) {
+                      if (!resp) return;
+                      if (resp.id == -2) { alert('این کلیدواژه غیرفعال است.'); return; }
+                      else if (resp.id == -1) { alert('به جای «{0}» از کلیدواژهٔ «{1}» استفاده کنید.'.replace('{0}', term).replace('{1}', resp.title)); return; }
+                      d = $(s2).select2("data");
+                      $(s2).select2("close");
+                      d.push({count: resp.count, id: resp.id, title: resp.title});
+                      $(s2).select2("data", d);
+                    });
+                    e.preventDefault();
+                });
+              }, 1);
+              return "داده‌ای یافت نشد،  <a id='" + uuid + "-ajax-anchor' href='" /* + url */ + "'>افزودن «" + term + "»</a>";
+          },
+          formatInputTooShort: function (input, min) { return 'برای شروع جستجو تایپ کنید'.replace('{0}', min - input.length); },
+          // formatSelectionTooBig: function (limit) { return 'maxSelection'.replace('{0}', limit).replace('{1}', 'کلیدواژه'); },
+          formatResult: function(e) { return "<div>" + e.title + (typeof e.title2 !== "undefined" && e.title2 != null ? (' - ' + e.title2) : '') + (conf.entity == 'keyword' ? (' (<b>' + e.count + '</b>)') : (' (' + e.id + ')')) +"</div>";},
+          formatSelection: function(e) { return e.title + (typeof e.title2 !== "undefined" && e.title2 != null ? (' - ' + e.title2) : '') + ' (' + (conf.entity == 'keyword' ? e.count : e.id) + ')'; },
+          dropdownCssClass: "bigdrop", // apply css that makes the dropdown taller
+          escapeMarkup: function (m) { return m; } // we do not want to escape markup since we are displaying html in results
+        });
+      });
+    }
+    //]]>
+    </script><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>
+            .ui-dialog {
+                width: auto !important;
+            }
+        </style>
+        <script src="/res/ck4/ckeditor.js?_=20250118" type="text/javascript"></script>
+        <script src="/res/ck4/config.js?_=20250118" type="text/javascript"></script>
+        <script src="/res/ck4/adapters/jquery.js" type="text/javascript"></script>
+        <script src="/res/ck4/virastar-script-loader.js?_=20191218"></script>
+        <script src="/res/select2/select2.min.js"></script>
+        <link href="/res/select2/select2.css" rel="stylesheet" />
+        <script type="text/javascript">
+        //<![CDATA[
+            var _issueImageApectRatio;
+            var _IDLE_AUTOSAVE = 8000;
+            var _edData = "";
+            var _changed = false, _lastchanged=false;
+            var _la = new Date();
+            var _ed;
+            var initCkListener = function () {
+                _ed = CKEDITOR.instances["newsForm:newsTab:body"];
+                if (!_ed) {
+                    setTimeout(initCkListener, 3000);
+                    return;
+                }
+                _edData = _ed.getData();
+                _ed.on('change', function() {
+                    if (_ed.getData() !== _edData) {
+                        _edData = _ed.getData();
+                        changed('editor');
+                        _la = new Date();
+                    }
+                });
+                $('.changeListener').on('change', function (e) {
+                    changed(e);
+                });
+                $(this).click(function (e) {
+                    _la = new Date();
+                });
+                $(this).keypress(function (e) {
+                    _la = new Date();
+                });
+            };
+            $(initCkListener);
+            function changed(arg) {
+            	_changed = true;
+            }
+            function _pushParams(params) {
+                var pageUrl = window.location.href;
+                if (pageUrl.indexOf('?') >= 0) {
+                    pageUrl = pageUrl.substring(0, pageUrl.indexOf('?'));
+                }
+                var ic = $('#newsIdentity').val();
+                if (ic && pageUrl.indexOf('ic=' + ic) < 0) {
+                    pageUrl = pageUrl + '?ic=' + ic;
+                    if (params) pageUrl = pageUrl + '&' + params;
+                    window.history.pushState('', '', pageUrl);
+                }
+            }
+            function unobtrusive() {
+                $('select.select2').select2({
+                    placeholder: $(this).attr('placeholder'), width: 'element', allowClear: true
+                });
+                $('select.multiSelect2').select2({
+                    placeholder: "انتخاب...", width: 'element', allowClear: true, formatNoMatches: function () { return 'داده‌ای یافت نشد'; }
+                });
+                initCalendar();
+                initSelect2();
+                initMediaPlayer();
+            };
+            $(function() {
+                unobtrusive();
+                if (_IDLE_AUTOSAVE > 0) {
+                    setInterval(function() {
+                        if (!_ajax_started && _changed && new Date() - _la > _IDLE_AUTOSAVE) {
+                        	if(typeof automaticSave !== 'undefined') automaticSave();
+                        }
+                    }, 1000);
+                }
+            });
+            var earlyInitializeChart = false;
+            function tabChanged(index) {
+                /*if (earlyInitializeChart == false && index == 8) {
+                    earlyInitializeChart = true;
+                    if (window.initAnalytics) initAnalytics();
+                }*/
+            }
+        //]]>
+        </script></head><body class="rtl body-rtl lang-fa growl-t-l theme-saga"><a id="j_id_m" href="#" tabindex="0" class="ui-scrolltop ui-widget" style="display: none;"><span class="ui-scrolltop-icon pi pi-chevron-up"></span></a><script id="j_id_m_s" type="text/javascript">$(function(){PrimeFaces.cw("ScrollTop","widget_j_id_m",{id:"j_id_m",target:"window",threshold:"400",behavior:"smooth"});});</script>
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-12">
+        <script language="javascript" type="text/javascript">
+            var _reported = false
+            var _ajax_started = false;
+            function newsroomHandleAjaxError(){
+                try { if (PF('bui')) PF('bui').hide(); } catch(e) {}
+                if (PF('internalMessageWidget')) try { PF('internalMessageWidget').stop(); } catch(e) {}
+                if (PF('cartablePollWidget')) try { PF('cartablePollWidget').stop(); } catch(e) {}
+                if (!_reported) {
+                    if (location.pathname.endsWith('/news.xhtml')) alert('عملیات انجام نشد! در صورتی که در حال ثبت خبر هستید، از ذخیره سازی محتوای خبر خود در محیط دیگری مثل ورد، اطمینان حاصل کنید و سامانه را ریفرش کنید.');
+                    else alert('عملیات ناموفق بود. لطفا ریفرش کنید و مجددا تلاش کنید.');
+                    _reported = true;
+                }
+            }
+        </script><div id="j_id_p" style="display: none;"></div><script id="j_id_p_s" type="text/javascript">$(function(){PrimeFaces.cw("Poll","internalMessageWidget",{id:"j_id_p",frequency:30,autoStart:true,fn:function(){PrimeFaces.ab({s:"j_id_p",p:"j_id_p",u:"inboxShortcut,messagePreviewDialogTitle,messagePreviewDialogMessage",g:false,iau:true,onco:function(xhr,status,args,data){$('.inboxShortcut').attr('data-notify') === 'true' && !_reported ? PF('lastMessagePreviewDialog').show() : void(null);}});}});});</script><script id="j_id_q" type="text/javascript">notified = function() {return PrimeFaces.ab({s:"j_id_q",iau:true,oner:function(xhr,status,error){_reported = true;;},pa:arguments[0]});}</script><div id="messagePreviewDialog" class="ui-dialog ui-widget ui-widget-content ui-corner-all ui-shadow ui-hidden-container ui-dialog-rtl" style="display:none"><div class="ui-dialog-titlebar ui-widget-header ui-helper-clearfix ui-corner-top"><span id="messagePreviewDialog_title" class="ui-dialog-title">نمایش پیام داخلی</span><a href="#" class="ui-dialog-titlebar-icon ui-dialog-titlebar-close ui-corner-all"><span class="ui-icon ui-icon-closethick"></span></a></div><div class="ui-dialog-content ui-widget-content" id="messagePreviewDialog_content"></div></div><script id="messagePreviewDialog_s" type="text/javascript">$(function(){PrimeFaces.cw("Dialog","lastMessagePreviewDialog",{id:"messagePreviewDialog",modal:true,height:"500",dynamic:true,closeOnEscape:true,onHide:function(){notified();}});});</script><div id="ajaxStatusPanel" class="ajax-status-icon"><div id="ajaxStatusPanel_start" style="display:none"><img src="/res/img/loading2.gif" alt="loading" /></div><div id="ajaxStatusPanel_complete" style="display:none"></div></div><script id="ajaxStatusPanel_s" type="text/javascript">$(function(){PrimeFaces.cw("AjaxStatus","widget_ajaxStatusPanel",{id:"ajaxStatusPanel",delay:0,start:function(){_ajax_started = true;},error:function(xhr,settings,error){newsroomHandleAjaxError()},complete:function(xhr,settings,args){_ajax_started = false;}});});</script>
+                <div class="head ui-widget-header py-2">
+                <div class="row">
+                    <div class="col-12 col-sm-4">
+                        <div class="d-flex justify-content-start">
+                            <div style="line-height: 1.8rem; text-indent: 5px;"><a href="/profile.xhtml" title="محسن حدادی">
+                                    <span class="fa fa-user"></span> [تازه نیوز - haddadi]</a> | چهارشنبه ۱۸ شهریور ۱۴۰۵ - ۱۲:۴۵ 
+                            </div>
+                            
+                         </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="head-text">
+                            <button class="btn menu-toggler d-none"><i class="fa fa-bars"></i></button><a href="/home.xhtml" style="text-decoration: none"><img src="/res/img/newsroom-logo-s.png" alt="صبا" /></a>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="d-flex justify-content-end">
+                            
+                            <ul class="header-tools">
+                                <li>
+                                    <a class="m-3" style="width: 20px" href="/search.xhtml"><i class="fa fa-search"></i></a>
+                                </li>
+                                <li>
+                                    <a class="m-3" style="width: 20px" href="/logout?nc=3058788511527470592" title="خروج"><span class="fa fa-power-off"></span></a>
+                                </li>
+                                <li><a href="/inbox.xhtml" id="inboxShortcut" name="inboxShortcut" onclick="inboxSeen()" style="color: " class="ui-state-default ui-button inboxShortcut" data-notify="false">
+                                        0
+                                        <span class="fa fa-envelope"></span></a><script id="j_id_1d" type="text/javascript">inboxSeen = function() {return PrimeFaces.ab({s:"j_id_1d",p:"j_id_1d",u:"inboxShortcut",pa:arguments[0]});}</script>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                </div>        
+                </div>        
+            </div>
+            <div id="mainbody" class="row">
+                <div class="col-12"><div id="sideMenu" class="sideMenu ui-menu ui-widget ui-widget-content ui-corner-all ui-helper-clearfix ui-menu-toggleable" style="" role="menu" tabindex="-1"><ul class="ui-menu-list ui-helper-reset"><li id="j_id_1n" class="ui-widget-header ui-corner-all"><h3><span class="ui-icon ui-icon-triangle-1-e"></span>خبر</h3></li><li class="ui-menuitem ui-widget ui-corner-all ui-submenu-child" role="menuitem" style="display:none"><a tabindex="-1" role="menuitem" title="خانه" class="ui-menuitem-link ui-corner-all " href="/home.xhtml"><span class="ui-menuitem-icon ui-icon fa fa-home ui-menuitem-icon-left" aria-hidden="true"></span><span class="ui-menuitem-text">خانه</span></a></li><li class="ui-menuitem ui-widget ui-corner-all ui-submenu-child" role="menuitem" style="display:none"><a tabindex="-1" role="menuitem" title="تولید سریع خبر" class="ui-menuitem-link ui-corner-all " href="/quickNews.xhtml"><span class="ui-menuitem-icon ui-icon fa fa-plus ui-menuitem-icon-left" aria-hidden="true"></span><span class="ui-menuitem-text">تولید سریع خبر</span></a></li><li class="ui-menuitem ui-widget ui-corner-all ui-submenu-child" role="menuitem" style="display:none"><a tabindex="-1" role="menuitem" title="تولید خبر" class="ui-menuitem-link ui-corner-all active" href="/news.xhtml"><span class="ui-menuitem-icon ui-icon fa fa-plus-circle ui-menuitem-icon-left" aria-hidden="true"></span><span class="ui-menuitem-text">تولید خبر</span></a></li><li class="ui-menuitem ui-widget ui-corner-all ui-submenu-child" role="menuitem" style="display:none"><a tabindex="-1" role="menuitem" title="آپلود فایل" class="ui-menuitem-link ui-corner-all " href="/admin/media.xhtml"><span class="ui-menuitem-icon ui-icon fa fa-upload ui-menuitem-icon-left" aria-hidden="true"></span><span class="ui-menuitem-text">آپلود فایل</span></a></li><li class="ui-menuitem ui-widget ui-corner-all ui-submenu-child" role="menuitem" style="display:none"><a tabindex="-1" role="menuitem" title="جستجوی فایل‌ها" class="ui-menuitem-link ui-corner-all " href="/mediaSearch.xhtml"><span class="ui-menuitem-icon ui-icon fa fw-fw fa-search ui-menuitem-icon-left" aria-hidden="true"></span><span class="ui-menuitem-text">جستجوی فایل‌ها</span></a></li><li class="ui-menuitem ui-widget ui-corner-all ui-submenu-child" role="menuitem" style="display:none"><a tabindex="-1" role="menuitem" title="چیدن اخبار" class="ui-menuitem-link ui-corner-all " href="/admin/newsPlace.xhtml"><span class="ui-menuitem-icon ui-icon fa fa-list ui-menuitem-icon-left" aria-hidden="true"></span><span class="ui-menuitem-text">چیدن اخبار</span></a></li><li id="j_id_24" class="ui-widget-header ui-corner-all"><h3><span class="ui-icon ui-icon-triangle-1-e"></span>مخاطب</h3></li><li class="ui-menuitem ui-widget ui-corner-all ui-submenu-child" role="menuitem" style="display:none"><a tabindex="-1" role="menuitem" title="کامنت‌ها" class="ui-menuitem-link ui-corner-all " href="/admin/comment.xhtml?popup=1&amp;read=false&amp;publish=false" target="_blank"><span class="ui-menuitem-icon ui-icon fa fa-comment ui-menuitem-icon-left" aria-hidden="true"></span><span class="ui-menuitem-text">کامنت‌ها</span></a></li><li id="j_id_35" class="ui-widget-header ui-corner-all"><h3><span class="ui-icon ui-icon-triangle-1-e"></span>سطح دسترسی</h3></li><li class="ui-menuitem ui-widget ui-corner-all ui-submenu-child" role="menuitem" style="display:none"><a tabindex="-1" role="menuitem" class="ui-menuitem-link ui-corner-all " href="/profile.xhtml"><span class="ui-menuitem-icon ui-icon fa fa-briefcase ui-menuitem-icon-left" aria-hidden="true"></span><span class="ui-menuitem-text">تنظیمات کاربر</span></a></li></ul></div><script id="sideMenu_s" type="text/javascript">$(function(){PrimeFaces.cw("PlainMenu","widget_sideMenu",{id:"sideMenu",appendTo:"@(body)",toggleable:true});});</script>
+                        <div id="content" class=""><form id="newsForm" name="newsForm" method="post" action="/news.xhtml" enctype="application/x-www-form-urlencoded"><span id="newsForm:growl" class="ui-growl-pl" data-widget="mainGrowl" data-summary="data-summary" data-detail="data-detail" data-severity="all,error" data-redisplay="true"></span><script id="newsForm:growl_s" type="text/javascript">$(function(){PrimeFaces.cw("Growl","mainGrowl",{id:"newsForm:growl",sticky:false,life:6000,escape:true,keepAlive:false,msgs:[]});});</script><div id="newsForm:confirmDialog" class="ui-confirm-dialog ui-dialog ui-widget ui-widget-content ui-corner-all ui-shadow ui-hidden-container ui-dialog-rtl"><div class="ui-dialog-titlebar ui-widget-header ui-helper-clearfix ui-corner-top"><span id="newsForm:confirmDialog_title" class="ui-dialog-title"></span><a href="#" class="ui-dialog-titlebar-icon ui-dialog-titlebar-close ui-corner-all"><span class="ui-icon ui-icon-closethick"></span></a></div><div class="ui-dialog-content ui-widget-content" id="newsForm:confirmDialog_content"><span class="ui-icon ui-confirm-dialog-severity"></span><span class="ui-confirm-dialog-message"></span></div><div class="ui-dialog-buttonpane ui-dialog-footer ui-widget-content ui-helper-clearfix"><button id="newsForm:j_id_3j" name="newsForm:j_id_3j" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left ui-confirmdialog-no" aria-label="" type="button"><span class="ui-button-icon-left ui-icon ui-c fa fa-remove"></span><span class="ui-button-text ui-c">خیر</span></button><script id="newsForm:j_id_3j_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_j_id_3j",{id:"newsForm:j_id_3j"});});</script><button id="newsForm:j_id_3k" name="newsForm:j_id_3k" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left ui-confirmdialog-yes" aria-label="" type="button"><span class="ui-button-icon-left ui-icon ui-c fa fa-check"></span><span class="ui-button-text ui-c">بله</span></button><script id="newsForm:j_id_3k_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_j_id_3k",{id:"newsForm:j_id_3k"});});</script></div></div><script id="newsForm:confirmDialog_s" type="text/javascript">$(function(){PrimeFaces.cw("ConfirmDialog","confirmation",{id:"newsForm:confirmDialog",closeOnEscape:true,global:true});});</script><div id="newsForm:newsTab" class="ui-tabs ui-widget ui-widget-content ui-corner-all ui-hidden-container ui-tabs-top newsTab newsPanel" data-widget="pfNewsTab"><ul class="ui-tabs-nav ui-helper-reset ui-widget-header ui-corner-all" role="tablist"><li class="ui-tabs-header ui-state-default ui-corner-top ui-state-disabled" role="presentation" data-index="0"><a id="newsForm:newsTab:previewTab_header" href="#newsForm:newsTab:previewTab" role="tab" aria-expanded="false" aria-selected="false" aria-label="" data-index="0" aria-controls="newsForm:newsTab:previewTab" tabindex="-1">پیش‌نمایش</a></li><li class="ui-tabs-header ui-state-default ui-tabs-selected ui-state-active ui-corner-top" role="presentation" data-index="1"><a id="newsForm:newsTab:editTab_header" href="#newsForm:newsTab:editTab" role="tab" aria-expanded="true" aria-selected="true" aria-label="" data-index="1" aria-controls="newsForm:newsTab:editTab">ویرایش</a></li><li class="ui-tabs-header ui-state-default ui-corner-top ui-state-disabled" role="presentation" data-index="2"><a id="newsForm:newsTab:newsBasics_header" href="#newsForm:newsTab:newsBasics" role="tab" aria-expanded="false" aria-selected="false" aria-label="" data-index="2" aria-controls="newsForm:newsTab:newsBasics" tabindex="-1">اطلاعات اولیه</a></li><li class="ui-tabs-header ui-state-default ui-corner-top ui-state-disabled" role="presentation" data-index="3"><a id="newsForm:newsTab:galleryTab_header" href="#newsForm:newsTab:galleryTab" role="tab" aria-expanded="false" aria-selected="false" aria-label="" data-index="3" aria-controls="newsForm:newsTab:galleryTab" tabindex="-1">ضمائم</a></li><li class="ui-tabs-header ui-state-default ui-corner-top ui-state-disabled" role="presentation" data-index="4"><a id="newsForm:newsTab:publishTab_header" href="#newsForm:newsTab:publishTab" role="tab" aria-expanded="false" aria-selected="false" aria-label="" data-index="4" aria-controls="newsForm:newsTab:publishTab" tabindex="-1">ارسال/انتشار</a></li><li class="ui-tabs-header ui-state-default ui-corner-top ui-state-disabled" role="presentation" data-index="5"><a id="newsForm:newsTab:newsHistory_header" href="#newsForm:newsTab:newsHistory" role="tab" aria-expanded="false" aria-selected="false" aria-label="" data-index="5" aria-controls="newsForm:newsTab:newsHistory" tabindex="-1">تاریخچه</a></li></ul><div class="ui-tabs-panels"><div id="newsForm:newsTab:previewTab" class="ui-tabs-panel ui-widget-content ui-corner-bottom ui-helper-hidden" role="tabpanel" aria-hidden="true" aria-labelledby="newsForm:newsTab:previewTab_header" data-index="0" tabindex="-1">
+
+    
+    <div id="previewBlock" layout="block" class="newsPreview">
+        
+        <div class="row ui-message-info">
+            <div class="col-lg-6 col-md-12">
+                <div class="row"><span class="col-3">کد خبر</span><span class="col-9"></span>
+                </div>
+
+                <div class="row"><span class="col-3">وضعیت</span><span class="col-9">وضعیت خبر</span>
+                </div>
+
+                <div class="row"><span class="col-3">نوع</span><span class="col-9">خبر</span>
+                </div><div class="row"><span class="col-3">سازنده</span><span class="col-9"> /                                           </span></div><div class="row"><span class="col-3">تغییردهنده</span><span class="col-9"> /                                           </span></div><div class="row"><span class="col-3">ناشر</span><span class="col-9"> / </span></div>
+
+                <div class="row"><span class="col-3">تاریخ ایجاد</span><span class="col-9 created">چهارشنبه ۱۸ شهریور ۱۴۰۵ - ۱۲:۴۵</span>
+                </div>
+                <div class="row"><span title="اولین تاریخ واقعی که خبر در آن به وضعیت منتشر شده منتقل شده باشد. در صورتی که خبر منتشر شده در آینده باشد، این تاریخ معادل زمانی است که اولین بار دکمهٔ انتشار زده شده است." class="col-3">تاریخ انتشار</span><span class="col-9 news-published"></span>
+                </div>
+                <div class="row"><span class="col-3">اولین انتشار</span><span class="col-9 published"></span>
+                </div>
+                <div class="row"><span class="col-3">منبع</span><span class="col-9 news-topic"></span>
+                </div>
+            </div>
+            <div class="col-lg-6 col-md-12">
+                <div class="row"><span class="col-3">سرویس</span><span class="col-9 topic">ویدیو</span>
+                </div>
+                <div class="row"><span class="col-3">کلیدواژه‌ها</span><span class="col-9 keyword"></span>
+                </div>
+
+                <div class="row"><span class="col-3">امتیاز دبیر</span><span class="col-9"></span>
+                </div>
+                <div class="row"><span class="col-3">امتیاز سردبیر</span><span class="col-9"></span>
+                </div><div class="row"><span class="col-3">بازدید</span><span class="col-9 visitCount"></span></div><div class="row"><span class="col-3">تاریخ آخرین بازدید</span><span class="col-9 lastView"></span></div><div class="row"><span class="col-3">کامنت‌ها</span><span class="col-9 visitCount"></span></div><div class="row"><span class="col-3">تاریخ آخرین نظر</span><span class="col-9 lastComment"></span></div><div class="row"><span class="col-3">سایز خبر</span><span class="col-9 visitCount">تیتر (0) +                                          روتیتر (0) +                                          لید (0) +                                          متن (0) =                                          0</span></div><div class="row"><span class="col-3">ویژگی‌ها</span>
+                    <div class="col-9 news-properties">
+                    </div></div>
+                <div class="row">
+                    <div class="col-6 my-3"><a href="printPreview.xhtml?n=" target="_blank" class="m-1 p-2 ui-state-default">چاپ</a>
+                    </div>
+                    <div class="col-6">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="photo">
+        </div>
+
+        <div class="body">
+        </div>
+
+    </div></div><div id="newsForm:newsTab:editTab" class="ui-tabs-panel ui-widget-content ui-corner-bottom" role="tabpanel" aria-hidden="false" aria-labelledby="newsForm:newsTab:editTab_header" data-index="1" tabindex=""><script id="newsForm:newsTab:j_id_ba" type="text/javascript">automaticSave = function() {return PrimeFaces.ab({s:"newsForm:newsTab:j_id_ba",f:"newsForm",p:"newsForm:newsTab,newsForm:newsTab:j_id_ba",u:"newsForm:growl,newsForm:newsTab:j_id_ba,newsForm:newsTab:j_id_bc",onst:function(cfg){_lastchanged=_changed;_changed=false;PF('bui').show();;},oner:function(xhr,status,error){_changed=_lastchanged;PF('bui').hide();;},onco:function(xhr,status,args,data){_changed=false;PF('bui').hide();unobtrusive();_pushParams();;},pa:arguments[0]});}</script>
+                    <div class="row"><div id="newsForm:newsTab:j_id_bc" class="ui-panel ui-widget ui-widget-content ui-corner-all ui-helper-hidden" data-widget="idHolder" role="region"><div id="newsForm:newsTab:j_id_bc_content" class="ui-panel-content ui-widget-content">
+                            <input type="hidden" id="newsIdentity" value="" />
+                            <input type="hidden" id="activeTab" value="1" /></div></div><script id="newsForm:newsTab:j_id_bc_s" type="text/javascript">$(function(){PrimeFaces.cw("Panel","idHolder",{id:"newsForm:newsTab:j_id_bc"});});</script>
+                        <div id="editNewsPanel" class="col-12 col-md-8">
+
+                            <div id="editNewsPanel" class="form-group"><div id="newsForm:newsTab:j_id_bf" class="ui-panel ui-widget ui-widget-content ui-corner-all col-12 ui-hidden-container" data-widget="widget_newsForm_newsTab_j_id_bf" role="region" aria-labelledby="newsForm:newsTab:j_id_bf_header"><div id="newsForm:newsTab:j_id_bf_header" class="ui-panel-titlebar ui-widget-header ui-helper-clearfix ui-corner-all" role="button" aria-expanded="false" aria-controls="newsForm:newsTab:j_id_bf_content"><span class="ui-panel-title">جزئیات</span><a id="newsForm:newsTab:j_id_bf_toggler" href="#" class="ui-panel-titlebar-icon ui-corner-all ui-state-default"><span class="ui-icon ui-icon-plusthick"></span></a></div><div id="newsForm:newsTab:j_id_bf_content" class="ui-panel-content ui-widget-content" style="display:none"><div class="row form-group"><label class="col-2" for="newsForm:newsTab:kicker">روتیتر</label>
+                                    <div class="col-10"><input id="newsForm:newsTab:kicker" name="newsForm:newsTab:kicker" type="text" class="ui-inputfield ui-inputtext ui-widget ui-state-default ui-corner-all kicker form-control changeListener replacePersianPlugin" data-p-label="روتیتر" data-p-maxlength="80" data-p-val="javax.faces.Length" /><script id="newsForm:newsTab:kicker_s" type="text/javascript">$(function(){PrimeFaces.cw("InputText","newsKicker",{id:"newsForm:newsTab:kicker"});});</script><div id="newsForm:newsTab:j_id_bk" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:kicker" data-redisplay="true" class="ui-message form-text text-muted col-11"></div><script id="newsForm:newsTab:j_id_bk_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_bk",{id:"newsForm:newsTab:j_id_bk",target:"newsForm:newsTab:kicker"});});</script>
+                                    </div></div><span class="row form-group"><label class="col-2" for="newsForm:newsTab:subhead">زیرتیتر</label>
+                                    <div class="col-10"><input id="newsForm:newsTab:subhead" name="newsForm:newsTab:subhead" type="text" class="ui-inputfield ui-inputtext ui-widget ui-state-default ui-corner-all subhead form-control changeListener replacePersianPlugin" data-p-label="زیرتیتر" data-p-maxlength="150" data-p-val="javax.faces.Length" /><script id="newsForm:newsTab:subhead_s" type="text/javascript">$(function(){PrimeFaces.cw("InputText","newsSubhead",{id:"newsForm:newsTab:subhead"});});</script><div id="newsForm:newsTab:j_id_bq" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:subhead" data-redisplay="true" class="ui-message form-text text-muted col-11"></div><script id="newsForm:newsTab:j_id_bq_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_bq",{id:"newsForm:newsTab:j_id_bq",target:"newsForm:newsTab:subhead"});});</script>
+                                    </div></span><span class="row form-group"><label class="col-2" for="newsForm:newsTab:shortHeadline">تیتر کوتاه</label>
+                                    <div class="col-10"><input id="newsForm:newsTab:shortHeadline" name="newsForm:newsTab:shortHeadline" type="text" class="ui-inputfield ui-inputtext ui-widget ui-state-default ui-corner-all shortHeadline form-control changeListener replacePersianPlugin" data-p-label="تیتر کوتاه" data-p-minlength="0" data-p-maxlength="100" data-p-val="javax.faces.Length" /><script id="newsForm:newsTab:shortHeadline_s" type="text/javascript">$(function(){PrimeFaces.cw("InputText","newsShortHeadline",{id:"newsForm:newsTab:shortHeadline"});});</script><div id="newsForm:newsTab:j_id_bw" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:shortHeadline" data-redisplay="true" class="ui-message form-text text-muted col-11"></div><script id="newsForm:newsTab:j_id_bw_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_bw",{id:"newsForm:newsTab:j_id_bw",target:"newsForm:newsTab:shortHeadline"});});</script>
+                                        
+                                        
+                                    </div></span></div><input id="newsForm:newsTab:j_id_bf_collapsed" name="newsForm:newsTab:j_id_bf_collapsed" type="hidden" autocomplete="off" value="true" /></div><script id="newsForm:newsTab:j_id_bf_s" type="text/javascript">$(function(){PrimeFaces.cw("Panel","widget_newsForm_newsTab_j_id_bf",{id:"newsForm:newsTab:j_id_bf",toggleable:true,toggleSpeed:500,collapsed:true,toggleOrientation:"vertical",toggleableHeader:false});});</script>
+                            </div><div class="form-group row"><label class="col-2" for="newsForm:newsTab:typeEarly">نوع</label><select id="newsForm:newsTab:typeEarly" name="newsForm:newsTab:typeEarly" size="1" class="col-10 select2">	<option value="1.ir_newsroom_dao_model_NewsType" selected="selected">                                                                        خبر</option>	<option value="3.ir_newsroom_dao_model_NewsType">                                                                        ویدیو</option>	<option value="7.ir_newsroom_dao_model_NewsType">                                                                        تک‌عکس</option>	<option value="9.ir_newsroom_dao_model_NewsType">                                                                        گفت‌وگو</option>	<option value="2.ir_newsroom_dao_model_NewsType">                                                                        گزارش تصويری</option>	<option value="10.ir_newsroom_dao_model_NewsType">                                                                        محدود</option></select><div id="newsForm:newsTab:j_id_c3" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:typeEarly" data-redisplay="true" class="ui-message"></div><script id="newsForm:newsTab:j_id_c3_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_c3",{id:"newsForm:newsTab:j_id_c3",target:"newsForm:newsTab:typeEarly"});});</script></div>
+
+
+
+                            <div class="row form-group">
+                                <div class="col-2"><label class="col-sm-12 col-6" for="newsForm:newsTab:headline">تیتر</label><span id="newsForm:newsTab:headlineCounter" class="headlineCounter col-sm-12 col-6"></span>
+                                </div>
+                                <div class="col-10"><textarea id="newsForm:newsTab:headline" name="newsForm:newsTab:headline" class="ui-inputfield ui-inputtextarea ui-widget ui-state-default ui-corner-all headline form-control changeListener replacePersianPlugin ui-inputtextarea-resizable" cols="20" rows="1" maxlength="150" onblur="$('.headlineCounter').hide()" onfocus="$('.headlineCounter').show()" data-p-label="تیتر"></textarea><script id="newsForm:newsTab:headline_s" type="text/javascript">$(function(){PrimeFaces.cw("InputTextarea","newsHeadline",{id:"newsForm:newsTab:headline",autoResize:true,maxlength:150,counter:"newsForm:newsTab:headlineCounter",counterTemplate:"{0}",countBytesAsChars:false});});</script><div id="newsForm:newsTab:j_id_c9" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:headline" data-redisplay="true" class="ui-message form-text text-muted col-11"></div><script id="newsForm:newsTab:j_id_c9_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_c9",{id:"newsForm:newsTab:j_id_c9",target:"newsForm:newsTab:headline"});});</script>
+                                </div>
+                            </div><span class="form-group row">
+                                <div class="col-2"><label class="col-sm-12 col-6" for="newsForm:newsTab:lead">لید</label><span id="newsForm:newsTab:leadCounter" class="leadCounter col-sm-12 col-6"></span>
+                                </div>
+                                <div class="col-10"><textarea id="newsForm:newsTab:lead" name="newsForm:newsTab:lead" class="ui-inputfield ui-inputtextarea ui-widget ui-state-default ui-corner-all form-control changeListener replacePersianPlugin ui-inputtextarea-resizable" cols="20" rows="3" maxlength="250" onblur="$('.leadCounter').hide()" onfocus="$('.leadCounter').show()" data-p-label="لید"></textarea><script id="newsForm:newsTab:lead_s" type="text/javascript">$(function(){PrimeFaces.cw("InputTextarea","newsLead",{id:"newsForm:newsTab:lead",autoResize:true,maxlength:250,counter:"newsForm:newsTab:leadCounter",counterTemplate:"{0}",countBytesAsChars:false});});</script><div id="newsForm:newsTab:j_id_ci" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:lead" data-redisplay="true" class="ui-message col-11"></div><script id="newsForm:newsTab:j_id_ci_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_ci",{id:"newsForm:newsTab:j_id_ci",target:"newsForm:newsTab:lead"});});</script>
+                                </div></span><span class="row"><div class="col-md-6"><div id="newsForm:newsTab:normalize" class="ui-selectbooleancheckbox ui-chkbox ui-widget"><div class="ui-helper-hidden-accessible"><input id="newsForm:newsTab:normalize_input" name="newsForm:newsTab:normalize_input" type="checkbox" aria-label="یکسان‌سازی نویسه‌ها" checked="checked" data-p-con="javax.faces.Boolean" data-p-hl="booleanchkbox" /></div><div class="ui-chkbox-box ui-widget ui-corner-all ui-state-default ui-state-active"><span class="ui-chkbox-icon ui-icon ui-icon-check ui-c"></span></div><span class="ui-chkbox-label">یکسان‌سازی نویسه‌ها</span></div><script id="newsForm:newsTab:normalize_s" type="text/javascript">$(function(){PrimeFaces.cw("SelectBooleanCheckbox","widget_newsForm_newsTab_normalize",{id:"newsForm:newsTab:normalize"});});</script><span id="newsForm:newsTab:normalizeTextHint" class="hint fa fa-info-circle"> </span><div id="newsForm:newsTab:j_id_co" class="ui-tooltip ui-widget ui-tooltip-left" role="tooltip"><div class="ui-tooltip-arrow"></div><div class="ui-tooltip-text ui-shadow ui-corner-all">یکسان‌سازی نویسه‌های عربی و فارسی به یک شکل. مثلا ي عربی به شکل ی فارسی تبدیل می‌شود.</div></div><script id="newsForm:newsTab:j_id_co_s" type="text/javascript">$(function(){PrimeFaces.cw("Tooltip","widget_newsForm_newsTab_j_id_co",{id:"newsForm:newsTab:j_id_co",showEffect:"fade",hideEffect:"fade",target:"newsForm:newsTab:normalizeTextHint",escape:false,position:"left"});});</script></div></span>
+
+                            <div class="row">
+                                <div class="col-12 col-md-4">
+                                    <div class="row form-group"><script id="newsForm:newsTab:j_id_cu" type="text/javascript">setImage = function() {return PrimeFaces.ab({s:"newsForm:newsTab:j_id_cu",f:"newsForm",u:"newsForm",onsu:function(data,status,xhr){changed('image');},onco:function(xhr,status,args,data){unobtrusive();},pa:arguments[0]});}</script><button id="newsForm:newsTab:j_id_cv" name="newsForm:newsTab:j_id_cv" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left col-10" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){popupCenter('mediaSearch.xhtml?menu=0&amp;fmt=1&amp;popup=4&amp;callback=setImage', 'mediaSearch', $(window).width()*80/100, $(window).height()*80/100)},function(event){PrimeFaces.ab({s:&quot;newsForm:newsTab:j_id_cv&quot;,f:&quot;newsForm&quot;});return false;}]);" type="submit"><span class="ui-button-icon-left ui-icon ui-c fa fa-photo"></span><span class="ui-button-text ui-c">انتخاب عکس...</span></button><script id="newsForm:newsTab:j_id_cv_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_j_id_cv",{id:"newsForm:newsTab:j_id_cv"});});</script>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <div class="row form-group"><script id="newsForm:newsTab:j_id_d2" type="text/javascript">setImage2 = function() {return PrimeFaces.ab({s:"newsForm:newsTab:j_id_d2",f:"newsForm",u:"newsForm",onsu:function(data,status,xhr){changed('image2');},onco:function(xhr,status,args,data){unobtrusive();;},pa:arguments[0]});}</script><button id="newsForm:newsTab:j_id_d3" name="newsForm:newsTab:j_id_d3" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left col-10" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){popupCenter('mediaSearch.xhtml?menu=0&amp;fmt=1&amp;popup=4&amp;callback=setImage2', 'mediaSearch', $(window).width()*80/100, $(window).height()*80/100)},function(event){PrimeFaces.ab({s:&quot;newsForm:newsTab:j_id_d3&quot;,f:&quot;newsForm&quot;});return false;}]);" type="submit"><span class="ui-button-icon-left ui-icon ui-c fa fa-photo"></span><span class="ui-button-text ui-c">انتخاب عکس داخلی...</span></button><script id="newsForm:newsTab:j_id_d3_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_j_id_d3",{id:"newsForm:newsTab:j_id_d3"});});</script>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <div class="row form-group"><script id="newsForm:newsTab:j_id_da" type="text/javascript">setImage3 = function() {return PrimeFaces.ab({s:"newsForm:newsTab:j_id_da",f:"newsForm",u:"newsForm",onsu:function(data,status,xhr){changed('image3');},onco:function(xhr,status,args,data){unobtrusive();;},pa:arguments[0]});}</script><button id="newsForm:newsTab:j_id_db" name="newsForm:newsTab:j_id_db" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left col-10" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){popupCenter('mediaSearch.xhtml?menu=0&amp;fmt=1&amp;popup=4&amp;callback=setImage3', 'mediaSearch', $(window).width()*80/100, $(window).height()*80/100)},function(event){PrimeFaces.ab({s:&quot;newsForm:newsTab:j_id_db&quot;,f:&quot;newsForm&quot;});return false;}]);" type="submit"><span class="ui-button-icon-left ui-icon ui-c fa fa-photo"></span><span class="ui-button-text ui-c">انتخاب عکس ثانویه...</span></button><script id="newsForm:newsTab:j_id_db_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_j_id_db",{id:"newsForm:newsTab:j_id_db"});});</script>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <div class="row"><label class="col-2" for="newsForm:newsTab:caption">زیرنویس عکس</label><input id="newsForm:newsTab:caption" name="newsForm:newsTab:caption" type="text" class="ui-inputfield ui-inputtext ui-widget ui-state-default ui-corner-all caption col-10 changeListener replacePersianPlugin" maxlength="200" placeholder="زیرنویس عکس" data-p-label="زیرنویس عکس" data-p-maxlength="200" data-p-val="javax.faces.Length" /><script id="newsForm:newsTab:caption_s" type="text/javascript">$(function(){PrimeFaces.cw("InputText","newsCaption",{id:"newsForm:newsTab:caption",maxlength:200});});</script>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-4">
+
+                            <div class="row"><button id="newsForm:newsTab:btnSaveBaseNews" name="newsForm:newsTab:btnSaveBaseNews" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left col-6 my-1" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:btnSaveBaseNews&quot;,f:&quot;newsForm&quot;,u:&quot;newsForm:growl,newsForm:newsTab,newsForm:currNewsInfo&quot;,onst:function(cfg){PF('bui').show();;},onsu:function(data,status,xhr){PF('bui').hide();;},onco:function(xhr,status,args,data){unobtrusive();_pushParams();;}});return false;" type="submit"><span class="ui-button-icon-left ui-icon ui-c fa fa-save"></span><span class="ui-button-text ui-c">ثبت</span></button><script id="newsForm:newsTab:btnSaveBaseNews_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_btnSaveBaseNews",{id:"newsForm:newsTab:btnSaveBaseNews"});});</script><button id="newsForm:newsTab:btnSaveHistoryBaseNews" name="newsForm:newsTab:btnSaveHistoryBaseNews" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left col-6 my-1" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:btnSaveHistoryBaseNews&quot;,f:&quot;newsForm&quot;,u:&quot;newsForm:growl,newsForm:newsTab,newsForm:currNewsInfo&quot;,onst:function(cfg){PF('bui').show();;},onsu:function(data,status,xhr){PF('bui').hide();;},onco:function(xhr,status,args,data){unobtrusive();_pushParams();;}});return false;" type="submit"><span class="ui-button-icon-left ui-icon ui-c fa fa-life-saver"></span><span class="ui-button-text ui-c">ثبت در تاریخچه</span></button><script id="newsForm:newsTab:btnSaveHistoryBaseNews_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_btnSaveHistoryBaseNews",{id:"newsForm:newsTab:btnSaveHistoryBaseNews"});});</script>
+
+                                <div class="col-12 my-1"></div><div id="newsForm:newsTab:lockNews" class="ui-selectbooleanbutton ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left ui-state-disabled col-12 col-sm-6"><div class="ui-helper-hidden-accessible"><input id="newsForm:newsTab:lockNews_input" name="newsForm:newsTab:lockNews_input" type="checkbox" aria-label="قفل نشده" data-p-con="javax.faces.Boolean" data-p-hl="booleanbutton" disabled="disabled" onchange="PrimeFaces.ab({s:&quot;newsForm:newsTab:lockNews&quot;,e:&quot;valueChange&quot;,f:&quot;newsForm&quot;,p:&quot;newsForm:newsTab:lockNews&quot;,u:&quot;newsForm:growl,newsForm:newsTab:lockNews&quot;});" /></div><span class="ui-button-icon-left ui-icon ui-c fa fa-unlock"></span><span class="ui-button-text ui-c">قفل نشده</span></div><script id="newsForm:newsTab:lockNews_s" type="text/javascript">$(function(){PrimeFaces.cw("SelectBooleanButton","bb",{id:"newsForm:newsTab:lockNews",onLabel:"قفل شده",offLabel:"قفل نشده",onIcon:"fa fa\-lock",offIcon:"fa fa\-unlock"});});</script><button id="newsForm:newsTab:btnExit1" name="newsForm:newsTab:btnExit1" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left col-12 col-sm-6" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:btnExit1&quot;,f:&quot;newsForm&quot;,u:&quot;newsForm:growl&quot;});return false;" type="submit"><span class="ui-button-icon-left ui-icon ui-c fa fa-sign-out"></span><span class="ui-button-text ui-c">خروج</span></button><script id="newsForm:newsTab:btnExit1_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_btnExit1",{id:"newsForm:newsTab:btnExit1"});});</script>
+
+                                
+                            </div>
+                        </div>
+                    </div><div id="newsForm:newsTab:newsBodyPanel" class="my-1"><textarea id="newsForm:newsTab:body" name="newsForm:newsTab:body" class="richeditor" cols="90" rows="20" spellcheck=""></textarea>
+                        <script type="text/javascript">
+                            CKEDITOR.env.isCompatible = true;
+                            CKEDITOR.timestamp = '20250118';
+                            
+                            $('textarea.richeditor').ckeditor({
+                                
+                                
+                                skin: 'moonocolor',
+                                language: 'fa',
+                                filebrowserBrowseUrl: '/mediaSearch.xhtml?popup=1',
+                                filebrowserUploadUrl: '/rest/upload',
+                                filebrowserVideoBrowseUrl: '/mediaSearch.xhtml?popup=1&fmt=4',
+                                filebrowserAudioBrowseUrl: '/mediaSearch.xhtml?popup=1&fmt=3',
+                                uploadUrl: '/rest/upload?responseType=json',
+                                contentsCss: ['/res/ck4/contents.css?b=20250118', '/part/profileCss.xhtml?ts=202501181788945257000'],
+                                entities: false,
+                                entities_greek: false,
+                                entities_latin: false,
+                                fillEmptyBlocks: false,
+                                enterMode: CKEDITOR.ENTER_P,
+                                pasteFromWordPromptCleanup: true,
+                                pasteFromWordRemoveFontStyles: true,
+                                forcePasteAsPlainText: false,
+                                autosave: {
+                                    Savekey: 'nid_' + (!$('#newsIdentity').val() ? 'draft' : $('#newsIdentity').val())
+                                    ,delay: 99999999
+                                    ,saveDetectionSelectors: '[id$=btnSaveBaseNews],[id$=lockNews],[id$=btnReturnNews1],[id$=btnSuspendNews1]'
+                                },
+                                disableNativeSpellChecker: false,
+                                
+                                
+                            });
+                        </script><div id="newsForm:newsTab:j_id_dy" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:body" data-redisplay="true" class="ui-message"></div><script id="newsForm:newsTab:j_id_dy_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_dy",{id:"newsForm:newsTab:j_id_dy",target:"newsForm:newsTab:body"});});</script></div></div><div id="newsForm:newsTab:newsBasics" class="ui-tabs-panel ui-widget-content ui-corner-bottom ui-helper-hidden" role="tabpanel" aria-hidden="true" aria-labelledby="newsForm:newsTab:newsBasics_header" data-index="2" tabindex="-1"><div id="newsForm:newsTab:newBasicsBlock" class="row">
+                        <div class="col-12 col-md-6">
+                            <div class="form-group row"><label class="col-2" for="newsForm:newsTab:type">نوع</label><select id="newsForm:newsTab:type" name="newsForm:newsTab:type" size="1" class="col-10 select2">	<option value="1.ir_newsroom_dao_model_NewsType" selected="selected">                                                                        خبر</option>	<option value="3.ir_newsroom_dao_model_NewsType">                                                                        ویدیو</option>	<option value="7.ir_newsroom_dao_model_NewsType">                                                                        تک‌عکس</option>	<option value="9.ir_newsroom_dao_model_NewsType">                                                                        گفت‌وگو</option>	<option value="2.ir_newsroom_dao_model_NewsType">                                                                        گزارش تصويری</option>	<option value="10.ir_newsroom_dao_model_NewsType">                                                                        محدود</option></select><div id="newsForm:newsTab:j_id_e5" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:type" data-redisplay="true" class="ui-message"></div><script id="newsForm:newsTab:j_id_e5_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_e5",{id:"newsForm:newsTab:j_id_e5",target:"newsForm:newsTab:type"});});</script>
+                            </div>
+                            <div class="row form-group"><label class="col-2" for="newsForm:newsTab:topic">سرویس</label><select id="newsForm:newsTab:topic" name="newsForm:newsTab:topic" size="1" class="col-10 select2"><optgroup label="ویدیو">	<option value="3492.ir_newsroom_dao_model_Topic" selected="selected">ویدیو</option></optgroup><optgroup label="عکس">	<option value="1768.ir_newsroom_dao_model_Topic">عکس</option></optgroup><optgroup label="ایران">	<option value="1.ir_newsroom_dao_model_Topic">ایران</option></optgroup><optgroup label="ورزش ایران">	<option value="3.ir_newsroom_dao_model_Topic">ورزش ایران</option></optgroup><optgroup label="چهره‌ها">	<option value="3299.ir_newsroom_dao_model_Topic">چهره‌ها</option></optgroup><optgroup label="حوادث">	<option value="48.ir_newsroom_dao_model_Topic">حوادث</option></optgroup><optgroup label="مجله تازه">	<option value="248.ir_newsroom_dao_model_Topic">مجله تازه</option></optgroup><optgroup label="ورزش جهان">	<option value="4.ir_newsroom_dao_model_Topic">ورزش جهان</option></optgroup><optgroup label="جهان">	<option value="2.ir_newsroom_dao_model_Topic">جهان</option></optgroup></select><div id="newsForm:newsTab:j_id_ea" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:topic" data-redisplay="true" class="ui-message"></div><script id="newsForm:newsTab:j_id_ea_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_ea",{id:"newsForm:newsTab:j_id_ea",target:"newsForm:newsTab:topic"});});</script>
+                            </div>
+                            <div class="row form-group"><label class="col-sm-2" for="newsForm:newsTab:relatedTopics">سرویس‌های مرتبط</label><select id="newsForm:newsTab:relatedTopics" name="newsForm:newsTab:relatedTopics" multiple="multiple" size="11" class="col-sm-10 multiSelect2">	<option value="1768.ir_newsroom_dao_model_Topic">عکس</option>	<option value="3492.ir_newsroom_dao_model_Topic">ویدیو</option>	<option value="1.ir_newsroom_dao_model_Topic">ایران</option>	<option value="3299.ir_newsroom_dao_model_Topic">چهره‌ها</option>	<option value="48.ir_newsroom_dao_model_Topic">حوادث</option>	<option value="3321.ir_newsroom_dao_model_Topic">دریافتی</option>	<option value="248.ir_newsroom_dao_model_Topic">مجله تازه</option>	<option value="3.ir_newsroom_dao_model_Topic">ورزش ایران</option>	<option value="4.ir_newsroom_dao_model_Topic">ورزش جهان</option>	<option value="2.ir_newsroom_dao_model_Topic">جهان</option>	<option value="4000.ir_newsroom_dao_model_Topic">موقت</option></select><div id="newsForm:newsTab:j_id_ef" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:relatedTopics" data-redisplay="true" class="ui-message"></div><script id="newsForm:newsTab:j_id_ef_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_ef",{id:"newsForm:newsTab:j_id_ef",target:"newsForm:newsTab:relatedTopics"});});</script>
+                            </div>
+                            <div class="row form-group"><label class="col-2 col-sm-2 col-md-6 col-lg-2" for="newsForm:newsTab:journalist1">خبرنگار</label><input id="newsForm:newsTab:journalist2" name="newsForm:newsTab:journalist2" type="text" value="" class="installSelect2 col-10 col-sm-4 col-md-6 col-lg-4" placeholder=" " data-select2-conf="{&quot;entity&quot;: &quot;person&quot;, &quot;allowClear&quot;: true}" />
+                            </div><div id="newsForm:newsTab:keywordPanel" class="row form-group"><span class="col-2">کلیدواژه</span>
+                                    <div class="col-10">
+                                        <div class="row"><input id="newsForm:newsTab:keywordList" name="newsForm:newsTab:keywordList" type="text" value="" class="installSelect2 col-9" data-select2-conf="{&quot;entity&quot;: &quot;keyword&quot;, &quot;single&quot;: false, &quot;minInputLength&quot;: 2, &quot;groupBy&quot;: &quot;news&quot;, &quot;exactField&quot;: &quot;#keywordExactSearch&quot;}" />
+                                            <input class="col-1" type="checkbox" id="keywordExactSearch" title="جستجوی دقیق برای عین کلمهٔ وارد شده" />
+                                            <label class="col-2" for="keywordExactSearch" title="جستجوی دقیق برای عین کلمهٔ وارد شده">دقیق</label>
+                                        </div>
+                                    </div></div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="row form-group"><label class="col-2" for="newsForm:newsTab:j_id_fs">منبع</label><input id="newsForm:newsTab:source2" name="newsForm:newsTab:source2" type="text" value="" class="installSelect2 col-10" placeholder=" " data-select2-conf="{&quot;entity&quot;: &quot;source&quot;, &quot;allowClear&quot;: true}" /><div id="newsForm:newsTab:j_id_fx" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:source1" data-redisplay="true" class="ui-message"></div><script id="newsForm:newsTab:j_id_fx_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_fx",{id:"newsForm:newsTab:j_id_fx",target:"newsForm:newsTab:source1"});});</script>
+                            </div>
+                            <div class="row form-group"><label class="col-2" for="newsForm:newsTab:newsEntityTag">برچسب‌ها</label><div id="newsForm:newsTab:newsEntityTag" class="col-10"><div id="newsForm:newsTab:j_id_gd:tagFragment">
+    <table width="100%">
+        <tr><td><div id="newsForm:newsTab:j_id_gd:tagPanel"><label for="newsForm:newsTab:j_id_gd:tagItem">فیلد:</label><script type="text/javascript" src="/javax.faces.resource/jsf.js.xhtml?ln=javax.faces"></script><select id="newsForm:newsTab:j_id_gd:tagItem" name="newsForm:newsTab:j_id_gd:tagItem" size="1" onchange="PrimeFaces.ab({s:this,e:&quot;change&quot;,f:&quot;newsForm&quot;,p:&quot;newsForm:newsTab:j_id_gd:tagItem&quot;,u:&quot;newsForm:newsTab:j_id_gd:tagPanel&quot;,onco:function(xhr,status,args,data){try{unobtrusive();}catch(e){};}});" class="select2">	<option value="" selected="selected">- - - - - -</option></select></div>
+        </td>
+        <td><table><tbody><tr><td><button id="newsForm:newsTab:j_id_gd:j_id_hh" name="newsForm:newsTab:j_id_gd:j_id_hh" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-icon-only" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:j_id_gd:j_id_hh&quot;,f:&quot;newsForm&quot;,p:&quot;newsForm:newsTab:j_id_gd:tagFragment&quot;,u:&quot;newsForm:newsTab:j_id_gd:tagPanel,newsForm:newsTab:j_id_gd:entityTagList,newsForm:newsTab:newsEntityTag&quot;,onco:function(xhr,status,args,data){try{unobtrusive();}catch(e){};}});return false;" title="افزودن" type="submit"><span class="ui-button-icon-left ui-icon ui-c fa fa-plus"></span><span class="ui-button-text ui-c">افزودن</span></button><script id="newsForm:newsTab:j_id_gd:j_id_hh_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_j_id_gd_j_id_hh",{id:"newsForm:newsTab:j_id_gd:j_id_hh"});});</script></td><td><div id="newsForm:newsTab:j_id_gd:entityTagList" class="ui-dataview ui-widget et-dview ui-dataview-list" style="max-height: 60px; overflow: auto; padding: 5px;"><div class="ui-dataview-header ui-widget-header ui-helper-clearfix ui-corner-top"><div class="ui-dataview-layout-options ui-selectonebutton ui-buttonset"></div></div><div id="newsForm:newsTab:j_id_gd:entityTagList_content" class="ui-dataview-content ui-widget-content"></div></div><script id="newsForm:newsTab:j_id_gd:entityTagList_s" type="text/javascript">$(function(){PrimeFaces.cw("DataView","widget_newsForm_newsTab_j_id_gd_entityTagList",{id:"newsForm:newsTab:j_id_gd:entityTagList"});});</script></td></tr></tbody></table>
+        </td>
+    </tr></table></div></div>
+                            </div>
+                            <div class="row form-group">
+                            </div>
+                        </div></div>
+
+                    <div style="text-align: center"><button id="newsForm:newsTab:btnSaveNewsBasics" name="newsForm:newsTab:btnSaveNewsBasics" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left px-2" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:btnSaveNewsBasics&quot;,f:&quot;newsForm&quot;,p:&quot;newsForm:newsTab:newBasicsBlock&quot;,u:&quot;newsForm:growl,newsForm:currNewsInfo,newsForm:newsTab&quot;,onst:function(cfg){PF('bui').show();;},onsu:function(data,status,xhr){PF('bui').hide();;},onco:function(xhr,status,args,data){unobtrusive(); scrollToEdit($('#newsForm\\:newsTab'));;}});return false;" type="submit"><span class="ui-button-icon-left ui-icon ui-c fa fa-save"></span><span class="ui-button-text ui-c">ثبت</span></button><script id="newsForm:newsTab:btnSaveNewsBasics_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_btnSaveNewsBasics",{id:"newsForm:newsTab:btnSaveNewsBasics"});});</script>
+                        
+                        
+                    </div></div><div id="newsForm:newsTab:galleryTab" class="ui-tabs-panel ui-widget-content ui-corner-bottom ui-helper-hidden" role="tabpanel" aria-hidden="true" aria-labelledby="newsForm:newsTab:galleryTab_header" data-index="3" tabindex="-1"><div id="newsForm:newsTab:galleryPanel" class="ui-outputpanel ui-widget"><span id="newsForm:newsTab:newsImageSelection" class="ui-helper-hidden"></span><script id="newsForm:newsTab:newsImageSelection_s" type="text/javascript">$(function(){PrimeFaces.cw("SelectOneRadio","widget_newsForm_newsTab_newsImageSelection",{id:"newsForm:newsTab:newsImageSelection",custom:true,unselectable:false});});</script><div id="newsForm:newsTab:galleryDnD" class="ui-dataview ui-widget ms-dview datagrid-container ui-dataview-grid"><div class="ui-dataview-header ui-widget-header ui-helper-clearfix ui-corner-top">
+                                <div style="height: 36px">گزارش تصویری<button id="newsForm:newsTab:galleryDnD:j_id_ia" name="newsForm:newsTab:galleryDnD:j_id_ia" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only push-trail" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:galleryDnD:j_id_ia&quot;,f:&quot;newsForm&quot;,u:&quot;chooseImageDialog&quot;,onco:function(xhr,status,args,data){PF('chooseImage1').show();;}});return false;" type="submit"><span class="ui-button-text ui-c">انتخاب تصاویر...</span></button><script id="newsForm:newsTab:galleryDnD:j_id_ia_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_galleryDnD_j_id_ia",{id:"newsForm:newsTab:galleryDnD:j_id_ia"});});</script>
+                                </div><div class="ui-dataview-layout-options ui-selectonebutton ui-buttonset"></div></div><div id="newsForm:newsTab:galleryDnD_content" class="ui-dataview-content ui-widget-content">داده‌ای موجود نیست</div></div><script id="newsForm:newsTab:galleryDnD_s" type="text/javascript">$(function(){PrimeFaces.cw("DataView","widget_newsForm_newsTab_galleryDnD",{id:"newsForm:newsTab:galleryDnD"});});</script></div><div id="newsForm:newsTab:attachmentTable" class="ui-datatable ui-widget ui-datatable-rtl"><div class="ui-datatable-header ui-widget-header ui-corner-top">
+                            <div style="height: 36px">ضمائم<button id="newsForm:newsTab:attachmentTable:j_id_j8" name="newsForm:newsTab:attachmentTable:j_id_j8" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only push-trail" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:attachmentTable:j_id_j8&quot;,f:&quot;newsForm&quot;,u:&quot;chooseImageDialog&quot;,onco:function(xhr,status,args,data){PF('chooseImage1').show();;}});return false;" type="submit"><span class="ui-button-text ui-c">انتخاب ضمائم...</span></button><script id="newsForm:newsTab:attachmentTable:j_id_j8_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_attachmentTable_j_id_j8",{id:"newsForm:newsTab:attachmentTable:j_id_j8"});});</script>
+                            </div></div><div class="ui-datatable-tablewrapper"><table role="grid"><thead id="newsForm:newsTab:attachmentTable_head"><tr><th id="newsForm:newsTab:attachmentTable:j_id_ja" class="ui-state-default ui-column-p-2" aria-label="ردیف" scope="col" style="width:50px"><span class="ui-column-title">ردیف</span></th><th id="newsForm:newsTab:attachmentTable:j_id_jd" class="ui-state-default" aria-label="عملیات" scope="col" style="width:60px"><span class="ui-column-title">عملیات</span></th><th id="newsForm:newsTab:attachmentTable:j_id_ji" class="ui-state-default ui-column-p-2" aria-label="نوع" scope="col"><span class="ui-column-title">نوع</span></th><th id="newsForm:newsTab:attachmentTable:j_id_jq" class="ui-state-default" aria-label="عکس" scope="col"><span class="ui-column-title">عکس</span></th><th id="newsForm:newsTab:attachmentTable:j_id_kb" class="ui-state-default" aria-label="عنوان" scope="col"><span class="ui-column-title">عنوان</span></th></tr></thead><tbody id="newsForm:newsTab:attachmentTable_data" class="ui-datatable-data ui-widget-content"><tr class="ui-widget-content ui-datatable-empty-message"><td colspan="5">داده‌ای موجود نیست</td></tr></tbody></table></div></div><script id="newsForm:newsTab:attachmentTable_s" type="text/javascript">$(function(){PrimeFaces.cw("DataTable","widget_newsForm_newsTab_attachmentTable",{id:"newsForm:newsTab:attachmentTable",filter:true,groupColumnIndexes:[],disableContextMenuIfEmpty:false});});</script><div style="text-align: center"><button id="newsForm:newsTab:btnSaveMedia" name="newsForm:newsTab:btnSaveMedia" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left mx-2" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:btnSaveMedia&quot;,f:&quot;newsForm&quot;,p:&quot;newsForm:newsTab:galleryTab&quot;,u:&quot;newsForm:growl,newsForm:newsTab&quot;,onst:function(cfg){PF('bui').show();;},onco:function(xhr,status,args,data){PF('bui').hide();}});return false;" type="submit"><span class="ui-button-icon-left ui-icon ui-c fa fa-save"></span><span class="ui-button-text ui-c">ثبت</span></button><script id="newsForm:newsTab:btnSaveMedia_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_btnSaveMedia",{id:"newsForm:newsTab:btnSaveMedia"});});</script><div id="newsForm:newsTab:j_id_kh" class="ui-selectbooleancheckbox ui-chkbox ui-widget"><div class="ui-helper-hidden-accessible"><input id="newsForm:newsTab:j_id_kh_input" name="newsForm:newsTab:j_id_kh_input" type="checkbox" aria-label="حذف فایل‌های تکراری" checked="checked" data-p-con="javax.faces.Boolean" data-p-hl="booleanchkbox" /></div><div class="ui-chkbox-box ui-widget ui-corner-all ui-state-default ui-state-active"><span class="ui-chkbox-icon ui-icon ui-icon-check ui-c"></span></div><span class="ui-chkbox-label">حذف فایل‌های تکراری</span></div><script id="newsForm:newsTab:j_id_kh_s" type="text/javascript">$(function(){PrimeFaces.cw("SelectBooleanCheckbox","widget_newsForm_newsTab_j_id_kh",{id:"newsForm:newsTab:j_id_kh"});});</script></div></div><div id="newsForm:newsTab:publishTab" class="ui-tabs-panel ui-widget-content ui-corner-bottom ui-helper-hidden" role="tabpanel" aria-hidden="true" aria-labelledby="newsForm:newsTab:publishTab_header" data-index="4" tabindex="-1"><div id="newsForm:newsTab:placeTable" class="ui-datatable ui-widget ui-datatable-rtl ui-datatable-reflow" style=";visibility:hidden;"><div class="ui-datatable-header ui-widget-header ui-corner-top">ارسال به جایگاه خبری</div><div class="ui-datatable-tablewrapper"><table role="grid"><thead id="newsForm:newsTab:placeTable_head"><tr><th id="newsForm:newsTab:placeTable:j_id_px" class="ui-state-default" aria-label="باکس خبری" scope="col"><span class="ui-column-title">باکس خبری</span></th><th id="newsForm:newsTab:placeTable:j_id_q3" class="ui-state-default" aria-label="سرویس" scope="col"><span class="ui-column-title">سرویس</span></th><th id="newsForm:newsTab:placeTable:j_id_q7" class="ui-state-default ui-column-p-2" aria-label="ترتیب" scope="col" style="width: 60px"><span class="ui-column-title">ترتیب</span></th><th id="newsForm:newsTab:placeTable:j_id_qb" class="ui-state-default ui-column-p-2" aria-label="سازنده" scope="col"><span class="ui-column-title">سازنده</span></th><th id="newsForm:newsTab:placeTable:j_id_qe" class="ui-state-default ui-column-p-3" aria-label="ایجاد" scope="col" style="width: 80px"><span class="ui-column-title">ایجاد</span></th><th id="newsForm:newsTab:placeTable:j_id_qh" class="ui-state-default ui-column-p-4" aria-label="تغییردهنده" scope="col" style="width: 80px"><span class="ui-column-title">تغییردهنده</span></th><th id="newsForm:newsTab:placeTable:j_id_qk" class="ui-state-default ui-column-p-5" aria-label="تغییریافته" scope="col" style="width: 80px"><span class="ui-column-title">تغییریافته</span></th><th id="newsForm:newsTab:placeTable:j_id_qn" class="ui-state-default" aria-label="" scope="col" style="width: 50px"><span class="ui-column-title"></span></th></tr></thead><tbody id="newsForm:newsTab:placeTable_data" class="ui-datatable-data ui-widget-content"><tr class="ui-widget-content ui-datatable-empty-message"><td colspan="8">داده‌ای موجود نیست</td></tr></tbody></table></div></div><script id="newsForm:newsTab:placeTable_s" type="text/javascript">$(function(){PrimeFaces.cw("DataTable","widget_newsForm_newsTab_placeTable",{id:"newsForm:newsTab:placeTable",filter:true,reflow:true,groupColumnIndexes:[],disableContextMenuIfEmpty:false});});</script><button id="newsForm:newsTab:btnAddPlace" name="newsForm:newsTab:btnAddPlace" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:btnAddPlace&quot;,f:&quot;newsForm&quot;,p:&quot;newsForm:newsTab:btnAddPlace&quot;,u:&quot;newsForm:newsTab:placeTable,newsForm:growl&quot;,onst:function(cfg){PF('bui').show();;},onco:function(xhr,status,args,data){PF('bui').hide(); unobtrusive();}});return false;" type="submit"><span class="ui-button-icon-left ui-icon ui-c fa fa-plus"></span><span class="ui-button-text ui-c">افزودن جایگاه</span></button><script id="newsForm:newsTab:btnAddPlace_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_btnAddPlace",{id:"newsForm:newsTab:btnAddPlace"});});</script>
+
+                    <div class="separatorBar"></div><div class="row">
+                        <div class="col-md-12 col-lg-6">
+                            <div class="row"><label class="col-3" for="newsForm:newsTab:pubDate1">تاریخ انتشار</label><input id="newsForm:newsTab:pubDate1" name="newsForm:newsTab:pubDate1" type="text" value="" maxlength="20" class="datePicker pcTime ltr 'col-6" autocomplete="off" /><div id="newsForm:newsTab:j_id_vg" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:pubDate1" data-redisplay="true" class="ui-message col-12"></div><script id="newsForm:newsTab:j_id_vg_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_vg",{id:"newsForm:newsTab:j_id_vg",target:"newsForm:newsTab:pubDate1"});});</script>
+                            </div>
+                            <div class="row"><div id="newsForm:newsTab:j_id_vi" class="ui-selectbooleancheckbox ui-chkbox ui-widget col-12" style="height: 36px;"><div class="ui-helper-hidden-accessible"><input id="newsForm:newsTab:j_id_vi_input" name="newsForm:newsTab:j_id_vi_input" type="checkbox" aria-label="جای‌گذاری لینک‌ها" checked="checked" data-p-con="javax.faces.Boolean" data-p-hl="booleanchkbox" onchange="PrimeFaces.ab({s:&quot;newsForm:newsTab:j_id_vi&quot;,e:&quot;valueChange&quot;,f:&quot;newsForm&quot;,p:&quot;newsForm:newsTab:j_id_vi&quot;,onco:function(xhr,status,args,data){unobtrusive();}});" /></div><div class="ui-chkbox-box ui-widget ui-corner-all ui-state-default ui-state-active"><span class="ui-chkbox-icon ui-icon ui-icon-check ui-c"></span></div><span class="ui-chkbox-label">جای‌گذاری لینک‌ها</span></div><script id="newsForm:newsTab:j_id_vi_s" type="text/javascript">$(function(){PrimeFaces.cw("SelectBooleanCheckbox","widget_newsForm_newsTab_j_id_vi",{id:"newsForm:newsTab:j_id_vi"});});</script>
+                            </div>
+                        </div></div>
+                    <div class="separatorBar"></div><div class="row">
+                        <div class="col-12">
+                            <div class="row">
+                                <div class="col-12 col-md-3"><div id="newsForm:newsTab:j_id_vn" class="ui-selectbooleancheckbox ui-chkbox ui-widget w-75"><div class="ui-helper-hidden-accessible"><input id="newsForm:newsTab:j_id_vn_input" name="newsForm:newsTab:j_id_vn_input" type="checkbox" aria-label="تغییر اسلاگ خبر" data-p-con="javax.faces.Boolean" data-p-hl="booleanchkbox" onchange="PrimeFaces.ab({s:&quot;newsForm:newsTab:j_id_vn&quot;,e:&quot;change&quot;,f:&quot;newsForm&quot;,p:&quot;newsForm:newsTab:j_id_vn&quot;,u:&quot;newsForm:newsTab:newsSlugContainer&quot;,onco:function(xhr,status,args,data){unobtrusive();}});" /></div><div class="ui-chkbox-box ui-widget ui-corner-all ui-state-default"><span class="ui-chkbox-icon ui-icon ui-icon-blank ui-c"></span></div><span class="ui-chkbox-label">تغییر اسلاگ خبر</span></div><script id="newsForm:newsTab:j_id_vn_s" type="text/javascript">$(function(){PrimeFaces.cw("SelectBooleanCheckbox","widget_newsForm_newsTab_j_id_vn",{id:"newsForm:newsTab:j_id_vn"});});</script><span id="newsForm:newsTab:changeNewsSlugHint" class="hint fa fa-info-circle"> </span><div id="newsForm:newsTab:j_id_vp" class="ui-tooltip ui-widget ui-tooltip-left" role="tooltip"><div class="ui-tooltip-arrow"></div><div class="ui-tooltip-text ui-shadow ui-corner-all">تغییر اسلاگ خبر. با تغییر این فیلد متنی که در آدرس خبر بعد از کد خبر قرار می‌گیرد سفارشی می‌شود. به طور پیش‌فرض بخشی از تیتر خبر به عنوان اسلاگ در یوآر‌ال خبر قرار می‌گیرد اما با دکمه‌های مقابل این باکس می‌توانید این مقدار را به معادل اسکی یا سرویس خبر هم تغییر دهید.</div></div><script id="newsForm:newsTab:j_id_vp_s" type="text/javascript">$(function(){PrimeFaces.cw("Tooltip","widget_newsForm_newsTab_j_id_vp",{id:"newsForm:newsTab:j_id_vp",showEffect:"fade",hideEffect:"fade",target:"newsForm:newsTab:changeNewsSlugHint",escape:false,position:"left"});});</script>
+                                </div><div id="newsForm:newsTab:newsSlugContainer" class="col-md-9 col-12 my-2">
+                                    <div class="row">
+                                        <div class="col-lg-9 col-12">
+                                            <div class="row ltr"><input id="newsForm:newsTab:j_id_vt" name="newsForm:newsTab:j_id_vt" type="text" class="ui-inputfield ui-inputtext ui-widget ui-state-default ui-corner-all ui-state-disabled d-none d-md-block col-md-4 border-0 text-right" disabled="disabled" /><script id="newsForm:newsTab:j_id_vt_s" type="text/javascript">$(function(){PrimeFaces.cw("InputText","widget_newsForm_newsTab_j_id_vt",{id:"newsForm:newsTab:j_id_vt"});});</script><input id="newsForm:newsTab:newsSlug" name="newsForm:newsTab:newsSlug" type="text" class="ui-inputfield ui-inputtext ui-widget ui-state-default ui-corner-all ui-state-disabled ltr col-11 col-md-8" disabled="disabled" autocomplete="off" onchange="PrimeFaces.ab({s:&quot;newsForm:newsTab:newsSlug&quot;,e:&quot;change&quot;,f:&quot;newsForm&quot;,p:&quot;newsForm:newsTab:newsSlug&quot;,u:&quot;newsForm:newsTab:newsSlug&quot;});" /><script id="newsForm:newsTab:newsSlug_s" type="text/javascript">$(function(){PrimeFaces.cw("InputText","widget_newsForm_newsTab_newsSlug",{id:"newsForm:newsTab:newsSlug"});});</script>
+                                            </div>
+                                        </div>
+                                        <div class="col-lg-3 col-9"><button id="newsForm:newsTab:slugType1" name="newsForm:newsTab:slugType1" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-icon-only ui-state-disabled" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:slugType1&quot;,f:&quot;newsForm&quot;,p:&quot;newsForm:newsTab:slugType1&quot;,u:&quot;newsForm:newsTab:newsSlug,newsForm:growl&quot;,onst:function(cfg){PF('bui').show();;},onco:function(xhr,status,args,data){PF('bui').hide(); unobtrusive();}});return false;" title="تیتر خبر" type="submit" disabled="disabled"><span class="ui-button-icon-left ui-icon ui-c fa fa-header"></span><span class="ui-button-text ui-c">تیتر خبر</span></button><script id="newsForm:newsTab:slugType1_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_slugType1",{id:"newsForm:newsTab:slugType1",disabledAttr:true});});</script><button id="newsForm:newsTab:slugType2" name="newsForm:newsTab:slugType2" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-icon-only ui-state-disabled" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:slugType2&quot;,f:&quot;newsForm&quot;,p:&quot;newsForm:newsTab:slugType2&quot;,u:&quot;newsForm:newsTab:newsSlug,newsForm:growl&quot;,onst:function(cfg){PF('bui').show();;},onco:function(xhr,status,args,data){PF('bui').hide(); unobtrusive();}});return false;" title="اسکی تیتر خبر" type="submit" disabled="disabled"><span class="ui-button-icon-left ui-icon ui-c fa fa-text-width"></span><span class="ui-button-text ui-c">اسکی تیتر خبر</span></button><script id="newsForm:newsTab:slugType2_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_slugType2",{id:"newsForm:newsTab:slugType2",disabledAttr:true});});</script><button id="newsForm:newsTab:slugType3" name="newsForm:newsTab:slugType3" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-icon-only ui-state-disabled" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:slugType3&quot;,f:&quot;newsForm&quot;,p:&quot;newsForm:newsTab:slugType3&quot;,u:&quot;newsForm:newsTab:newsSlug,newsForm:growl&quot;,onst:function(cfg){PF('bui').show();;},onco:function(xhr,status,args,data){PF('bui').hide(); unobtrusive();}});return false;" title="سرویس خبر" type="submit" disabled="disabled"><span class="ui-button-icon-left ui-icon ui-c fa fa-tag"></span><span class="ui-button-text ui-c">سرویس خبر</span></button><script id="newsForm:newsTab:slugType3_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_slugType3",{id:"newsForm:newsTab:slugType3",disabledAttr:true});});</script>
+                                        </div>
+                                    </div></div><div id="newsForm:newsTab:j_id_w0" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:newsSlug" data-redisplay="true" class="ui-message"></div><script id="newsForm:newsTab:j_id_w0_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_w0",{id:"newsForm:newsTab:j_id_w0",target:"newsForm:newsTab:newsSlug"});});</script>
+                            </div>
+                        </div></div><div class="row"></div><span class="row"><div class="col-12 col-md-6 col-xl-4"><label id="newsForm:newsTab:j_id_wh" class="ui-outputlabel ui-widget col-5" for="newsForm:newsTab:hasComment"><span class="ui-outputlabel-label">امکان ارسال نظر</span></label><div id="newsForm:newsTab:hasComment" class="ui-selectbooleanbutton ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only ui-state-active col-7" title="امکان ارسال نظر"><div class="ui-helper-hidden-accessible"><input id="newsForm:newsTab:hasComment_input" name="newsForm:newsTab:hasComment_input" type="checkbox" aria-label="بله" checked="checked" data-p-label="امکان ارسال نظر" data-p-con="javax.faces.Boolean" data-p-hl="booleanbutton" /></div><span class="ui-button-text ui-c">بله</span></div><script id="newsForm:newsTab:hasComment_s" type="text/javascript">$(function(){PrimeFaces.cw("SelectBooleanButton","widget_newsForm_newsTab_hasComment",{id:"newsForm:newsTab:hasComment",onLabel:"بله",offLabel:"خیر"});});</script></div><div class="col-12 col-md-6 col-xl-4"><label id="newsForm:newsTab:j_id_wk" class="ui-outputlabel ui-widget col-5" for="newsForm:newsTab:commentHeadline"><span class="ui-outputlabel-label">متن ارسال نظر</span></label><textarea id="newsForm:newsTab:commentHeadline" name="newsForm:newsTab:commentHeadline" class="ui-inputfield ui-inputtextarea ui-widget ui-state-default ui-corner-all col-7 ui-inputtextarea-resizable" cols="60" rows="1" maxlength="250" data-p-label="متن ارسال نظر" data-p-maxlength="250" data-p-val="javax.faces.Length"></textarea><script id="newsForm:newsTab:commentHeadline_s" type="text/javascript">$(function(){PrimeFaces.cw("InputTextarea","widget_newsForm_newsTab_commentHeadline",{id:"newsForm:newsTab:commentHeadline",autoResize:true,maxlength:250});});</script></div><div class="col-12 col-md-6 col-xl-4"><label id="newsForm:newsTab:j_id_wn" class="ui-outputlabel ui-widget col-5" for="newsForm:newsTab:invisibleTop"><span class="ui-outputlabel-label">عدم نمایش در ترین‌ها</span></label><div id="newsForm:newsTab:invisibleTop" class="ui-selectbooleanbutton ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only col-7" title="عدم نمایش در ترین‌ها"><div class="ui-helper-hidden-accessible"><input id="newsForm:newsTab:invisibleTop_input" name="newsForm:newsTab:invisibleTop_input" type="checkbox" aria-label="خیر" data-p-label="عدم نمایش در ترین‌ها" data-p-con="javax.faces.Boolean" data-p-hl="booleanbutton" /></div><span class="ui-button-text ui-c">خیر</span></div><script id="newsForm:newsTab:invisibleTop_s" type="text/javascript">$(function(){PrimeFaces.cw("SelectBooleanButton","widget_newsForm_newsTab_invisibleTop",{id:"newsForm:newsTab:invisibleTop",onLabel:"بله",offLabel:"خیر"});});</script></div><div class="col-12 col-md-6 col-xl-4"><label id="newsForm:newsTab:j_id_wy" class="ui-outputlabel ui-widget col-5" for="newsForm:newsTab:noInnerImage"><span class="ui-outputlabel-label">بدون عکس داخل خبر</span></label><div id="newsForm:newsTab:noInnerImage" class="ui-selectbooleanbutton ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only col-7" title="بدون عکس داخل خبر"><div class="ui-helper-hidden-accessible"><input id="newsForm:newsTab:noInnerImage_input" name="newsForm:newsTab:noInnerImage_input" type="checkbox" aria-label="خیر" data-p-label="بدون عکس داخل خبر" data-p-con="javax.faces.Boolean" data-p-hl="booleanbutton" /></div><span class="ui-button-text ui-c">خیر</span></div><script id="newsForm:newsTab:noInnerImage_s" type="text/javascript">$(function(){PrimeFaces.cw("SelectBooleanButton","widget_newsForm_newsTab_noInnerImage",{id:"newsForm:newsTab:noInnerImage",onLabel:"بله",offLabel:"خیر"});});</script></div><div class="col-12 col-md-6 col-xl-4"><label id="newsForm:newsTab:j_id_xc" class="ui-outputlabel ui-widget col-4" for="newsForm:newsTab:inProgressNews"><span class="ui-outputlabel-label">خبر در حال تکمیل</span></label><span id="newsForm:newsTab:inProgressNewsHint" class="hint fa fa-info-circle col-1"> </span><div id="newsForm:newsTab:j_id_xe" class="ui-tooltip ui-widget ui-tooltip-left" role="tooltip"><div class="ui-tooltip-arrow"></div><div class="ui-tooltip-text ui-shadow ui-corner-all">اگر انتخاب شود سامانه به طور خودکار آدرس کانونی خبر را در خروجی خبر درج نمی‌کند و کاربر می‌تواند مقدار دلخواه خود را در فیلد سئوی خبر درج کند.</div></div><script id="newsForm:newsTab:j_id_xe_s" type="text/javascript">$(function(){PrimeFaces.cw("Tooltip","widget_newsForm_newsTab_j_id_xe",{id:"newsForm:newsTab:j_id_xe",showEffect:"fade",hideEffect:"fade",target:"newsForm:newsTab:inProgressNewsHint",escape:false,position:"left"});});</script><div id="newsForm:newsTab:inProgressNews" class="ui-selectbooleanbutton ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only col-7" title="خبر در حال تکمیل"><div class="ui-helper-hidden-accessible"><input id="newsForm:newsTab:inProgressNews_input" name="newsForm:newsTab:inProgressNews_input" type="checkbox" aria-label="خیر" data-p-label="خبر در حال تکمیل" data-p-con="javax.faces.Boolean" data-p-hl="booleanbutton" /></div><span class="ui-button-text ui-c">خیر</span></div><script id="newsForm:newsTab:inProgressNews_s" type="text/javascript">$(function(){PrimeFaces.cw("SelectBooleanButton","widget_newsForm_newsTab_inProgressNews",{id:"newsForm:newsTab:inProgressNews",onLabel:"بله",offLabel:"خیر"});});</script></div></span><div class="separatorBar"></div>
+
+                    <div class="row">
+                        <div class="col-12 col-md-6">
+                            <div class="">
+                                <div class="col-12"><label title="یادداشت داخلی خبر را برای بیان توضیحات یا یادآوری مطلبی پیرامون خبر استفاده کنید. این مقدار در کارتابل، زیر عنوان خبر نمایش داده خواهد شد." for="newsForm:newsTab:newsNote">یادداشت داخلی خبر</label><span id="newsForm:newsTab:noteCounter" class="mx-2 noteCounter"></span>
+                                </div><textarea id="newsForm:newsTab:newsNote" name="newsForm:newsTab:newsNote" class="ui-inputfield ui-inputtextarea ui-widget ui-state-default ui-corner-all col-12 ui-inputtextarea-resizable" cols="20" rows="3" maxlength="800" data-p-maxlength="800" data-p-val="javax.faces.Length"></textarea><script id="newsForm:newsTab:newsNote_s" type="text/javascript">$(function(){PrimeFaces.cw("InputTextarea","widget_newsForm_newsTab_newsNote",{id:"newsForm:newsTab:newsNote",autoResize:true,maxlength:800,counter:"newsForm:newsTab:noteCounter",counterTemplate:"{0}",countBytesAsChars:false});});</script><div id="newsForm:newsTab:j_id_xq" role="alert" aria-atomic="true" aria-live="polite" data-display="both" data-target="newsForm:newsTab:noteCounter" data-redisplay="true" class="ui-message"></div><script id="newsForm:newsTab:j_id_xq_s" type="text/javascript">$(function(){PrimeFaces.cw("Message","widget_newsForm_newsTab_j_id_xq",{id:"newsForm:newsTab:j_id_xq",target:"newsForm:newsTab:noteCounter"});});</script>
+                            </div>
+                        </div>
+                    </div><div id="newsForm:newsTab:j_id_y4" class="ui-outputpanel ui-widget" style="text-align: center">
+                        <div class="row">
+                            <div class="col-12 col-lg-4 col-md-4 mx-1 my-1">
+                                <div class="row"><button id="newsForm:newsTab:btnPublishNews" name="newsForm:newsTab:btnPublishNews" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left col-6" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:btnPublishNews&quot;,f:&quot;newsForm&quot;,u:&quot;newsForm:growl&quot;,onst:function(cfg){PF('bui').show();;},onco:function(xhr,status,args,data){PF('bui').hide();}});return false;" type="submit"><span class="ui-button-icon-left ui-icon ui-c fa fa-wifi"></span><span class="ui-button-text ui-c">انتشار</span></button><script id="newsForm:newsTab:btnPublishNews_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_btnPublishNews",{id:"newsForm:newsTab:btnPublishNews"});});</script>
+                                </div>
+                            </div>
+                            <div class="col-12 col-lg-4 col-md-4 mx-1 my-1">
+                                <div class="row">
+                                </div>
+                            </div>
+                            <div class="col-12 col-lg-3 col-md-12 mx-1 my-1">
+                                <div class="row"><button id="newsForm:newsTab:btnForward" name="newsForm:newsTab:btnForward" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left col-5" aria-label="" onclick="PrimeFaces.ab({s:&quot;newsForm:newsTab:btnForward&quot;,f:&quot;newsForm&quot;,u:&quot;newsForm:growl&quot;,onst:function(cfg){PF('bui').show();;},onco:function(xhr,status,args,data){PF('bui').hide();}});return false;" type="submit"><span class="ui-button-icon-left ui-icon ui-c fa fa-forward"></span><span class="ui-button-text ui-c">ارجاع به</span></button><script id="newsForm:newsTab:btnForward_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_btnForward",{id:"newsForm:newsTab:btnForward"});});</script><select id="newsForm:newsTab:newsRecipient" name="newsForm:newsTab:newsRecipient" size="1" style="padding: 0 10px; width: 210px" class="col-7 select2" title="گیرنده" placeholder="انتخاب گیرنده">	<option value="" selected="selected"></option>	<option value="7.ir_newsroom_dao_model_UserProfile">تست تست (ai-bot)</option>	<option value="5.ir_newsroom_dao_model_UserProfile">محسن حدادی (haddadi)</option>	<option value="8.ir_newsroom_dao_model_UserProfile">زهرا خندان‌دل (khandandel)</option>	<option value="9.ir_newsroom_dao_model_UserProfile">شرکت نستوه (nastooh)</option>	<option value="2.ir_newsroom_dao_model_UserProfile">گزارش گزارش (reporter)</option>	<option value="3.ir_newsroom_dao_model_UserProfile">صالح یعقوبی (saleh)</option>	<option value="6.ir_newsroom_dao_model_UserProfile">سعیده تخت‌روان (takhtravan)</option>	<option value="1.ir_newsroom_dao_model_UserProfile">حامد واسعی (vasei)</option></select>
+                                </div>
+                            </div>
+                        </div></div></div><div id="newsForm:newsTab:newsHistory" class="ui-tabs-panel ui-widget-content ui-corner-bottom ui-helper-hidden" role="tabpanel" aria-hidden="true" aria-labelledby="newsForm:newsTab:newsHistory_header" data-index="5" tabindex="-1"><span class="text-info">* تاریخچهٔ خبر فقط در دو صورت ثبت می‌شود. ۱. هنگامی که خبر از یک وضعیت به وضعیت دیگر برود (مثلاً از خبرنگار به دبیر ارسال شود). ۲. در صورتی که خبری که در وضعیت انتشار است، بازانتشار شود.<br/>در جدول زیر، تاریخ، نمایانگر زمانی است که خبر از وضعیت مشخصی (در در ستون وضعیت آمده) به وضعیت دیگری ارسال شده است. وضعیت ثانویهٔ خبر را باید از قلم تاریخچهٔ بعدی به دست آورد.<br/>برای یافتن اطلاعات بیشتری درباره‌ی گردش خبر به جدول زیر تاریخچه تحت عنوان «جزئیات گردش خبر» مراجعه کنید.</span><div id="newsForm:newsTab:historyTable" class="ui-datatable ui-widget ui-datatable-rtl"><div class="ui-datatable-tablewrapper"><table role="grid"><thead id="newsForm:newsTab:historyTable_head"><tr><th id="newsForm:newsTab:historyTable:j_id_z9" class="ui-state-default" aria-label="Row Toggler" scope="col" style="width:1rem"><span class="ui-column-title ui-helper-hidden-accessible">Row Toggler</span></th><th id="newsForm:newsTab:historyTable:j_id_zp" class="ui-state-default" aria-label="" scope="col" style="width: 30px"><span class="ui-column-title"></span></th><th id="newsForm:newsTab:historyTable:j_id_zr" class="ui-state-default ui-column-p-2" aria-label="ردیف" scope="col" style="width: 30px"><span class="ui-column-title">ردیف</span></th><th id="newsForm:newsTab:historyTable:j_id_zu" class="ui-state-default" aria-label="تیتر" scope="col"><span class="ui-column-title">تیتر</span></th><th id="newsForm:newsTab:historyTable:j_id_zz" class="ui-state-default ui-column-p-3" aria-label="کلیددار" scope="col"><span class="ui-column-title">کلیددار</span></th><th id="newsForm:newsTab:historyTable:j_id_103" class="ui-state-default ui-column-p-5" aria-label="گیرنده" scope="col"><span class="ui-column-title">گیرنده</span></th><th id="newsForm:newsTab:historyTable:j_id_107" class="ui-state-default ui-column-p-4" aria-label="تغییردهنده" scope="col"><span class="ui-column-title">تغییردهنده</span></th><th id="newsForm:newsTab:historyTable:j_id_10b" class="ui-state-default ui-column-p-2" aria-label="تاریخ" scope="col"><span class="ui-column-title">تاریخ</span></th><th id="newsForm:newsTab:historyTable:j_id_10e" class="ui-state-default ui-column-p-2" aria-label="وضعیت قبلی" scope="col"><span class="ui-column-title">وضعیت قبلی</span></th><th id="newsForm:newsTab:historyTable:j_id_10h" class="ui-state-default" aria-label="مدیریت" scope="col"><span class="ui-column-title">مدیریت</span></th></tr></thead><tbody id="newsForm:newsTab:historyTable_data" class="ui-datatable-data ui-widget-content"><tr class="ui-widget-content ui-datatable-empty-message"><td colspan="10">داده‌ای موجود نیست</td></tr></tbody></table></div><input id="newsForm:newsTab:historyTable_rowExpansionState" name="newsForm:newsTab:historyTable_rowExpansionState" type="hidden" autocomplete="off" /></div><script id="newsForm:newsTab:historyTable_s" type="text/javascript">$(function(){PrimeFaces.cw("DataTable","widget_newsForm_newsTab_historyTable",{id:"newsForm:newsTab:historyTable",filter:true,expansion:true,rowExpandMode:"multiple",groupColumnIndexes:[],disableContextMenuIfEmpty:false});});</script><div id="newsForm:newsTab:j_id_10k" class="ui-outputpanel ui-widget" style="text-align: center"><button id="newsForm:newsTab:btnCompareHistory" name="newsForm:newsTab:btnCompareHistory" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-left" aria-label="" onclick="PrimeFaces.bcn(this,event,[function(event){if($('#newsForm\\:newsTab\\:historyTable').find('input:checked').length != 2) {alert('دقیقا دو قلم تاریخچه را برای مقایسه انتخاب کنید.'); return false;}},function(event){PrimeFaces.ab({s:&quot;newsForm:newsTab:btnCompareHistory&quot;,f:&quot;newsForm&quot;,u:&quot;newsDiffDialog&quot;,onst:function(cfg){PF('bui').show();;},onco:function(xhr,status,args,data){PF('bui').hide(); PF('newsDiff').show();}});return false;}]);" type="submit"><span class="ui-button-icon-left ui-icon ui-c fa fa-arrows-h"></span><span class="ui-button-text ui-c">مقایسه</span></button><script id="newsForm:newsTab:btnCompareHistory_s" type="text/javascript">$(function(){PrimeFaces.cw("CommandButton","widget_newsForm_newsTab_btnCompareHistory",{id:"newsForm:newsTab:btnCompareHistory"});});</script></div>
+
+                    <svg xmlns="http://www.w3.org/2000/svg" width="1" height="30px"></svg><div id="newsForm:newsTab:j_id_10n" class="ui-panel ui-widget ui-widget-content ui-corner-all ui-hidden-container" data-widget="widget_newsForm_newsTab_j_id_10n" role="region" aria-labelledby="newsForm:newsTab:j_id_10n_header"><div id="newsForm:newsTab:j_id_10n_header" class="ui-panel-titlebar ui-widget-header ui-helper-clearfix ui-corner-all" role="button" aria-expanded="false" aria-controls="newsForm:newsTab:j_id_10n_content"><span class="ui-panel-title">جزئیات گردش خبر</span><a id="newsForm:newsTab:j_id_10n_toggler" href="#" class="ui-panel-titlebar-icon ui-corner-all ui-state-default" title="باز/بسته"><span class="ui-icon ui-icon-plusthick"></span></a></div><div id="newsForm:newsTab:j_id_10n_content" class="ui-panel-content ui-widget-content" style="display:none"><div id="newsForm:newsTab:newsTransLog" class="ui-datatable ui-widget ui-datatable-rtl"><div class="ui-datatable-tablewrapper"><table role="grid"><thead id="newsForm:newsTab:newsTransLog_head"><tr><th id="newsForm:newsTab:newsTransLog:j_id_10p" class="ui-state-default" aria-label="ردیف" scope="col" style="width: 30px"><span class="ui-column-title">ردیف</span></th><th id="newsForm:newsTab:newsTransLog:j_id_10s" class="ui-state-default" aria-label="از وضعیت" scope="col"><span class="ui-column-title">از وضعیت</span></th><th id="newsForm:newsTab:newsTransLog:j_id_10v" class="ui-state-default" aria-label="به وضعیت" scope="col"><span class="ui-column-title">به وضعیت</span></th><th id="newsForm:newsTab:newsTransLog:j_id_10y" class="ui-state-default" aria-label="توسط" scope="col"><span class="ui-column-title">توسط</span></th><th id="newsForm:newsTab:newsTransLog:j_id_111" class="ui-state-default" aria-label="گیرنده" scope="col"><span class="ui-column-title">گیرنده</span></th><th id="newsForm:newsTab:newsTransLog:j_id_114" class="ui-state-default" aria-label="تاریخ" scope="col"><span class="ui-column-title">تاریخ</span></th></tr></thead><tbody id="newsForm:newsTab:newsTransLog_data" class="ui-datatable-data ui-widget-content"><tr class="ui-widget-content ui-datatable-empty-message"><td colspan="6">داده‌ای موجود نیست</td></tr></tbody></table></div></div><script id="newsForm:newsTab:newsTransLog_s" type="text/javascript">$(function(){PrimeFaces.cw("DataTable","widget_newsForm_newsTab_newsTransLog",{id:"newsForm:newsTab:newsTransLog",filter:true,groupColumnIndexes:[],disableContextMenuIfEmpty:false});});</script></div><input id="newsForm:newsTab:j_id_10n_collapsed" name="newsForm:newsTab:j_id_10n_collapsed" type="hidden" autocomplete="off" value="true" /></div><script id="newsForm:newsTab:j_id_10n_s" type="text/javascript">$(function(){PrimeFaces.cw("Panel","widget_newsForm_newsTab_j_id_10n",{id:"newsForm:newsTab:j_id_10n",toggleable:true,toggleSpeed:500,collapsed:true,toggleOrientation:"vertical",toggleableHeader:false});});</script></div></div><input id="newsForm:newsTab_activeIndex" name="newsForm:newsTab_activeIndex" type="hidden" autocomplete="off" value="1" /></div><script id="newsForm:newsTab_s" type="text/javascript">$(function(){PrimeFaces.cw("TabView","pfNewsTab",{id:"newsForm:newsTab",onTabChange:function(index){tabChanged(index); _changed=false;},onTabShow:function(index){unobtrusive()},effectDuration:"normal",scrollable:false,behaviors:{tabChange:function(ext,event) {PrimeFaces.ab({s:"newsForm:newsTab",e:"tabChange",f:"newsForm",p:"newsForm:newsTab",u:"newsForm:newsTab:j_id_bc",onco:function(xhr,status,args,data){_pushParams('tab=' + $('#activeTab').val());}},ext);}}});});</script><div id="newsForm:j_id_14h" class="ui-blockui-content ui-widget ui-widget-content ui-corner-all ui-helper-hidden ui-shadow"><img id="newsForm:j_id_14i" src="/res/img/ajax_loader_blue_128.gif?pfdrid_c=true" alt="" /></div><script id="newsForm:j_id_14h_s" type="text/javascript">$(function(){PrimeFaces.cw("BlockUI","bui",{id:"newsForm:j_id_14h",block:"newsForm",animate:false});});</script><script type="text/javascript">$(function(){$(document).off('keydown.newsForm:j_id_14j').on('keydown.newsForm:j_id_14j',null,'esc',function(){PF('bui').hide();return false;});});</script><input type="hidden" name="newsForm_SUBMIT" value="1" /><input type="hidden" name="javax.faces.ViewState" id="j_id__v_0:javax.faces.ViewState:1" value="RTgzQzY5RkEzMTNFN0M1RjAwMDAwMDAy" autocomplete="off" /></form><div id="newsDiffDialog" class="ui-dialog ui-widget ui-widget-content ui-corner-all ui-shadow ui-hidden-container" style="display:none"><div class="ui-dialog-titlebar ui-widget-header ui-helper-clearfix ui-corner-top"><span id="newsDiffDialog_title" class="ui-dialog-title">تغییرات</span><a href="#" class="ui-dialog-titlebar-icon ui-dialog-titlebar-close ui-corner-all"><span class="ui-icon ui-icon-closethick"></span></a><a href="#" class="ui-dialog-titlebar-icon ui-dialog-titlebar-maximize ui-corner-all"><span class="ui-icon ui-icon-extlink"></span></a></div><div class="ui-dialog-content ui-widget-content" id="newsDiffDialog_content"></div></div><script id="newsDiffDialog_s" type="text/javascript">$(function(){PrimeFaces.cw("Dialog","newsDiff",{id:"newsDiffDialog",dynamic:true,closeOnEscape:true,fitViewport:true});});</script><div id="chooseImageDialog" class="ui-dialog ui-widget ui-widget-content ui-corner-all ui-shadow ui-hidden-container ui-dialog-rtl" style="left: 50%; max-width: 1600px;;display:none"><div class="ui-dialog-titlebar ui-widget-header ui-helper-clearfix ui-corner-top"><span id="chooseImageDialog_title" class="ui-dialog-title">انتخاب عکس</span><a href="#" class="ui-dialog-titlebar-icon ui-dialog-titlebar-close ui-corner-all"><span class="ui-icon ui-icon-closethick"></span></a><a href="#" class="ui-dialog-titlebar-icon ui-dialog-titlebar-maximize ui-corner-all"><span class="ui-icon ui-icon-extlink"></span></a></div><div class="ui-dialog-content ui-widget-content" id="chooseImageDialog_content"></div></div><script id="chooseImageDialog_s" type="text/javascript">$(function(){PrimeFaces.cw("Dialog","chooseImage1",{id:"chooseImageDialog",modal:true,blockScroll:true,height:"500",dynamic:true,position:"top,center",closeOnEscape:true,onHide:function(){unobtrusive()}});});</script><div id="chooseImage2Dialog" class="ui-dialog ui-widget ui-widget-content ui-corner-all ui-shadow ui-hidden-container ui-dialog-rtl" style="left: 50%; max-width: 1600px;;display:none"><div class="ui-dialog-titlebar ui-widget-header ui-helper-clearfix ui-corner-top"><span id="chooseImage2Dialog_title" class="ui-dialog-title">انتخاب عکس</span><a href="#" class="ui-dialog-titlebar-icon ui-dialog-titlebar-close ui-corner-all"><span class="ui-icon ui-icon-closethick"></span></a><a href="#" class="ui-dialog-titlebar-icon ui-dialog-titlebar-maximize ui-corner-all"><span class="ui-icon ui-icon-extlink"></span></a></div><div class="ui-dialog-content ui-widget-content" id="chooseImage2Dialog_content"></div></div><script id="chooseImage2Dialog_s" type="text/javascript">$(function(){PrimeFaces.cw("Dialog","chooseImage2",{id:"chooseImage2Dialog",modal:true,blockScroll:true,height:"500",dynamic:true,position:"top,center",closeOnEscape:true,onHide:function(){unobtrusive()}});});</script><div id="historyPreviewDialog" class="ui-dialog ui-widget ui-widget-content ui-corner-all ui-shadow ui-hidden-container ui-dialog-rtl" style="display:none"><div class="ui-dialog-titlebar ui-widget-header ui-helper-clearfix ui-corner-top"><span id="historyPreviewDialog_title" class="ui-dialog-title">پیش‌نمایش</span><a href="#" class="ui-dialog-titlebar-icon ui-dialog-titlebar-close ui-corner-all"><span class="ui-icon ui-icon-closethick"></span></a><a href="#" class="ui-dialog-titlebar-icon ui-dialog-titlebar-maximize ui-corner-all"><span class="ui-icon ui-icon-extlink"></span></a></div><div class="ui-dialog-content ui-widget-content" id="historyPreviewDialog_content"></div></div><script id="historyPreviewDialog_s" type="text/javascript">$(function(){PrimeFaces.cw("Dialog","historyPreview",{id:"historyPreviewDialog",modal:true,blockScroll:true,dynamic:true,position:"center,top",closeOnEscape:true,fitViewport:true});});</script>
+                        </div>
+                </div>
+            </div>
+
+    <div id="footer" class="layout-footer">
+    <a target="_blank" href="http://nastooh.ir">اتاق خبر صبا - نستوه</a> - ویرایش خبرگزاری -
+    نسخه 7.9.1.1، ساخت 20250118.
+    
+    </div>
+        </div>
+    <script type="text/javascript">
+
+        // Sidebar JS
+        $(document).ready(function () {
+
+            var activeMenuItemLink = $('a.ui-menuitem-link.active');
+
+            if (activeMenuItemLink.length > 0) {
+
+                var activeMenuItem = activeMenuItemLink.closest('.ui-submenu-child');
+                var activeSubmenu = activeMenuItem.prevAll('.ui-widget-header').first();
+
+                activeSubmenu.attr('aria-expanded', 'true');
+                activeSubmenu.find('span.ui-icon')
+                    .removeClass('ui-icon-triangle-1-e').addClass('ui-icon-triangle-1-s');
+
+                activeMenuItem.prevUntil('.ui-widget-header').css('display', '');
+                activeMenuItem.css('display', '');
+                activeMenuItem.nextUntil('.ui-widget-header').css('display', '');
+
+                activeMenuItemLink.attr('tabindex', '0');
+                activeMenuItemLink.addClass('ui-state-hover ui-state-active');
+
+            }
+
+        });
+
+        // Iframe Dialog
+        document.addEventListener("DOMContentLoaded", function () {
+            const iframe = document.getElementById("contentIframe");
+            if (iframe) {
+                iframe.onload = resizeIframe;
+            }
+        });
+
+        function resizeIframe() {
+            const iframe = document.getElementById('contentIframe');
+            if (iframe) {
+                if (iframe.contentWindow) {
+                    const iframeContent = iframe.contentWindow.document;
+
+                    // Set iframe width and height to match its content
+                    iframe.style.width = Math.max(300, iframeContent.documentElement.scrollWidth) + 'px';
+                    iframe.style.height = Math.max(168.75, iframeContent.documentElement.scrollHeight) + 'px';
+                }
+            }
+        }
+
+        function openIframeDialog(elementId, title) {
+            if (elementId) {
+                // Get the h:outputLink element by ID
+                var element = document.getElementById(elementId);
+
+                // Find the first hidden input within this element whose ID ends with "contentUrl"
+                var hiddenInput = element.querySelector('input[id*="contentUrl"]');
+
+                // Check if the hidden input was found and retrieve its value
+                if (hiddenInput) {
+                    var contentUrl = hiddenInput.value;
+
+                    if (contentUrl) {
+                        // Set the media URL in the iframe and display the dialog
+                        document.getElementById('contentIframe').src = contentUrl;
+                        // Set the dialog title
+                        PF('iframeDialog').jq.find('.ui-dialog-title').text(title);
+                        PF('iframeDialog').show();
+                    }
+                }
+                return false; // Prevents default link behavior
+            }
+        }
+
+        function resetIframeDialog() {
+            const iframe = document.getElementById('contentIframe');
+
+            iframe.src = '';
+            iframe.style.width = '';
+            iframe.style.height = '';
+
+            PF('iframeDialog').jq.find('.ui-dialog-title').text('');
+        }
+
+    </script><form id="j_id_2u9" name="j_id_2u9" method="post" action="/news.xhtml" enctype="application/x-www-form-urlencoded"><div id="j_id_2u9:iframeDialog" class="ui-dialog ui-widget ui-widget-content ui-corner-all ui-shadow ui-hidden-container iframe-dialog ui-dialog-rtl" style="display:none"><div class="ui-dialog-titlebar ui-widget-header ui-helper-clearfix ui-corner-top"><span id="j_id_2u9:iframeDialog_title" class="ui-dialog-title"></span><a href="#" class="ui-dialog-titlebar-icon ui-dialog-titlebar-close ui-corner-all"><span class="ui-icon ui-icon-closethick"></span></a></div><div class="ui-dialog-content ui-widget-content" id="j_id_2u9:iframeDialog_content">
+            <iframe id="contentIframe" src="" class="content-iframe"></iframe></div></div><script id="j_id_2u9:iframeDialog_s" type="text/javascript">$(function(){PrimeFaces.cw("Dialog","iframeDialog",{id:"j_id_2u9:iframeDialog",resizable:false,modal:true,showEffect:"fade",hideEffect:"fade",onHide:function(){resetIframeDialog()}});});</script><input type="hidden" name="j_id_2u9_SUBMIT" value="1" /><input type="hidden" name="javax.faces.ViewState" id="j_id__v_0:javax.faces.ViewState:2" value="RTgzQzY5RkEzMTNFN0M1RjAwMDAwMDAy" autocomplete="off" /></form></body>
+</html>

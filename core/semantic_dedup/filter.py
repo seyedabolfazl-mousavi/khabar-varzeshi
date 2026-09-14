@@ -28,7 +28,7 @@ class SemanticMatchResult:
 
 
 class SemanticDedupFilter:
-    """Compare incoming articles against the 24h Khabar Varzeshi baseline corpus."""
+    """Compare incoming articles against the site's 24h published RSS baseline."""
 
     def __init__(
         self,

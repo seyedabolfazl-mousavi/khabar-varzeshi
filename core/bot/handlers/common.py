@@ -68,7 +68,7 @@ def build_router(config: BotConfig, admin_filter: AdminFilter) -> Router:
 
         if message.from_user and message.from_user.id in config.allowed_admin_ids:
             await message.answer(
-                "سلام! من ربات سردبیر خبرورزشی هستم.\n\n"
+                "سلام! من ربات سردبیر تازه‌نیوز هستم.\n\n"
                 f"برای دریافت آخرین اخبار، دکمه <b>{CHECK_PENDING_BUTTON}</b> "
                 "یا دستور /check_pending را بزنید.\n"
                 "در لیست خلاصه، روی تیتر هر خبر بزنید تا جزئیات و دکمه‌های انتشار باز شود.",
@@ -78,7 +78,7 @@ def build_router(config: BotConfig, admin_filter: AdminFilter) -> Router:
             return
 
         await message.answer(
-            "سلام! به ربات خبرورزشی خوش آمدید.",
+            "سلام! به ربات تازه‌نیوز خوش آمدید.",
             reply_markup=main_menu(),
         )
 

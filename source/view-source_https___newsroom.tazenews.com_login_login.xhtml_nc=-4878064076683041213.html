@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://xmlns.jcp.org/jsf/core "><head id="j_id_3"><link type="text/css" rel="stylesheet" href="/javax.faces.resource/theme.css.xhtml?ln=primefaces-saga&amp;v=14.0.9" /><link type="text/css" rel="stylesheet" href="/javax.faces.resource/primeicons/primeicons.css.xhtml?ln=primefaces&amp;v=14.0.9" /><script src="/javax.faces.resource/validation/validation.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script src="/javax.faces.resource/moment/moment.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script src="/javax.faces.resource/validation/validation.bv.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script src="/javax.faces.resource/locales/locale-fa.js.xhtml?ln=primefaces&amp;v=14.0.9"></script><script type="text/javascript">if(window.PrimeFaces){PrimeFaces.settings.locale='fa';PrimeFaces.settings.viewId='/login/login.xhtml';PrimeFaces.settings.contextPath='';PrimeFaces.settings.cookiesSecure=false;PrimeFaces.settings.validateEmptyFields=true;PrimeFaces.settings.considerEmptyStringNull=true;}</script>
+        <title>صبا - تازه نیوز - ورود</title>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="stylesheet" href="/login/css/style.css?_=20220614_4" />
+        <meta name="robots" content="noindex, nofollow" /></head><body class="rtl">
+        <div class="login-container">
+            <form action="/j_spring_security_check" method="post">
+                <div>
+                    <div id="login-box">
+                        <div class="messages">
+                        </div>
+                            <div class="form-group">
+                                <div class="login-box-name">نام کاربری:</div>
+                                <div class="login-box-field">
+                                    <input class="ltr form-login" title="Username" value="" size="30" maxlength="50" autofocus="autofocus" autocomplete="username" type="text" name="j_username" placeholder="نام کاربری" />
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <div class="login-box-name">گذرواژه:</div>
+                                <div class="login-box-field">
+                                    <input name="j_password" type="password" class="ltr form-login" title="Password" value="" size="30" maxlength="100" placeholder="گذرواژه" />
+                                </div>
+                            </div>
+
+                            <div class="form-group options">
+                                <div class="login-box-options">
+                                    <input id="rememberMe" type="checkbox" name="_spring_security_remember_me" />
+                                    <label for="rememberMe">مرا به خاطر بسپار</label>
+                                </div>
+                            </div>
+                            <input type="hidden" name="j_session_token" value="35dd9f569b12edd4462a259d88265586d7f509fbf4c451e452d0ecba8908858a2f7d23172f58d8c277cd439a90538ce3869fb72bbce7983005d03af913a127cd" />
+                            <div class="text-center">
+                                <input class="login-box-submit" type="submit" value="ورود" />
+                            </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <footer>
+            <div class="poweredby">
+                <a href="http://nastooh.ir" target="_blank">nastooh.ir</a>
+                <a title="Nastooh Saba Newsroom" target="_blank" href="http://www.nastooh.ir">
+                    <img src="/res/img/newsroom-logo-s.png" width="36" />
+                </a>
+            </div>
+        </footer>
+        <script src="/login/js/jquery-3.6.3.min.js"></script>
+        <script src="/login/js/login.min.js"></script>
+        <script type="text/javascript">
+            $('form input[type=button]').on('click', function(e) {
+            	$f = $(this).parents('form');
+            	if ($(this).attr('name')) $f.attr('action', $f.attr('action') + '?' + $(this).attr('name'));
+            	$(this).parents('form').submit();
+            });
+            $("#authHiddenInput").attr("value", $(".secondAuth select").val());
+            $(".secondAuth select").change(function() {
+                $("#authHiddenInput").val($(".secondAuth select").val());
+            });
+        </script></body>
+</html>

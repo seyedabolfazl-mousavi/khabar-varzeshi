@@ -1,4 +1,4 @@
-"""Semantic deduplication against the Khabar Varzeshi 24-hour baseline feed."""
+"""Semantic deduplication against the site's 24-hour baseline RSS feed."""
 
 from core.semantic_dedup.filter import (
     SemanticDedupFilter,

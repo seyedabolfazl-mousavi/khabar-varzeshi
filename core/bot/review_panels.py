@@ -81,7 +81,7 @@ def build_publish_status_suffix(article: NewsArticle, *, site_published: bool) -
     if article.status == NewsArticle.Status.PUBLISHED:
         parts.append("✅ کانال تلگرام")
     if site_published:
-        parts.append("✅ سایت خبرورزشی")
+        parts.append("✅ سایت تازه‌نیوز")
 
     if not parts:
         return None
