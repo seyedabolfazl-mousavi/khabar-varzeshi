@@ -1,5 +1,8 @@
 """Hourly news pool ingestion: collect recent RSS items, priority-dedupe,
-rewrite with Gemini, and persist as pending NewsArticle rows.
+filter editorially, rewrite selected items, and persist as pending NewsArticle rows.
+
+Selection (keep/reject) and rewrite are separate LLM stages so filter criteria
+never appear in published title/body/telegram text.
 
 Run with:
 
@@ -90,32 +93,30 @@ TIMEOUT_EXCEPTIONS: tuple[type[BaseException], ...] = (
     ArvanAIRequestError,
 )
 
-# Keys always required from the LLM.
-REQUIRED_KEYS = (
-    "decision",
-    "selection_reason",
-    "site_title",
-    "site_lead",
-    "site_body",
-    "telegram_text",
-)
+# Keys required from each separate LLM stage.
+SELECT_KEYS = ("decision", "selection_reason")
+REWRITE_KEYS = ("site_title", "site_lead", "site_body", "telegram_text")
 SELECT_DECISIONS = frozenset({"select", "needs_review"})
 VALID_DECISIONS = frozenset({"select", "reject", "needs_review"})
 
 # Matches an opening ``` or ```json fence, and the closing ``` fence.
 _FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
 
-PROMPT_TEMPLATE = """\
-تو دستیار دبیر «تازه‌نیوز» هستی. از ورودی معتبر زیر، اول سخت‌گیرانه تصمیم بگیر که آیا این خبر برای مخاطب ایرانی «قابل‌کلیک و جذاب» است یا نه؛ بعد فقط در صورت انتخاب یا نیاز به بررسی، پیش‌نویس فارسی بنویس. اولویت با فوتبال است. کوتاهی تیتر هرگز نباید دقت، روشنی یا وضعیت قطعی/غیرقطعی خبر را مخدوش کند.
+# ---------------------------------------------------------------------------
+# Stage 1 — editorial filter only (never writes published title/body).
+# ---------------------------------------------------------------------------
+SELECT_PROMPT_TEMPLATE = """\
+تو فقط فیلتر تحریریهٔ «تازه‌نیوز» هستی. فقط تصمیم بگیر این خبر را نگه داریم یا حذف کنیم.
+هیچ تیتر، لید، متن سایت یا پست تلگرام ننویس. اولویت با فوتبال است.
 
 ## اصل سخت‌گیرانهٔ انتخاب
 هدف: پیشنهاد خبرهایی که مردم ایران واقعاً دوست دارند باز کنند، بخوانند و به اشتراک بگذارند — نه هر خبر ورزشی درست یا صرفاً مرتبط با ایران.
 مرتبط‌بودن با ایران شرط لازم نیست. خبر جهانی/اروپایی/آسیایی هم اگر برای مخاطب ایرانی کشش کلیک و بازدید داشته باشد، انتخاب کن.
 اما سخت‌گیر باش: اگر شک داری که کسی تیتر را باز کند، یا خبر روزمره/کم‌حاشیه/فقط برای طرفداران محلی است → decision=reject.
-برای پُرکردن فهرست، خبر متوسط یا ضعیف اضافه نکن. تیتر جذاب به‌تنهایی خبر کم‌ارزش را نجات نمی‌دهد.
+برای پُرکردن فهرست، خبر متوسط یا ضعیف اضافه نکن.
 
 ## ترتیب تصمیم
-۱) اعتبار و کفایت اطلاعات  ۲) پتانسیل کلیک/بازدید نزد مخاطب ایرانی  ۳) ارزش خبری و حاشیه  ۴) تازگی و تفاوت با خبرهای قبلی  ۵) تیترنویسی.
+۱) اعتبار و کفایت اطلاعات  ۲) پتانسیل کلیک/بازدید نزد مخاطب ایرانی  ۳) ارزش خبری و حاشیه  ۴) تازگی و تفاوت با خبرهای قبلی.
 
 ## جذابیت کلیک و بازدید (معیار اصلی)
 از خودت بپرس: مخاطب ایرانی معمولی کانال/سایت ورزشی، با دیدن این تیتر، چقدر احتمال دارد کلیک کند؟
@@ -124,7 +125,7 @@ PROMPT_TEMPLATE = """\
 نام مشهور یا عدد بزرگ به‌تنهایی کافی نیست؛ باید اتفاق یا زاویهٔ واقعاً جذاب باشد.
 
 ## ارزش خبری در selection_reason
-در یک جمله بگو: چه اتفاقی افتاده و چرا مخاطب ایرانی ممکن است کلیک کند؟ (یا چرا حذف/بررسی لازم است). صریحاً به کشش بازدید/جذابیت اشاره کن وقتی select می‌کنی.
+در یک جمله بگو: چه اتفاقی افتاده و چرا مخاطب ایرانی ممکن است کلیک کند؟ (یا چرا حذف/بررسی لازم است). صریحاً به کشش بازدید/جذابیت اشاره کن وقتی select می‌کنی. این متن فقط یادداشت داخلی تحریریه است.
 
 ## محدوده موضوعی
 انتخاب کن اگر جذاب است: فوتبال ایران و تیم ملی؛ ستاره‌ها و تیم‌های بزرگ اروپا و جهان؛ لیگ‌های سطح اول و مسابقات مهم؛ حاشیه‌ها و اتفاقات وایرال فوتبال؛ موارد نادر در سایر ورزش‌ها فقط وقتی چهره/رویداد برای ایرانی‌ها خیلی شناخته‌شده یا وایرال است.
@@ -132,13 +133,47 @@ PROMPT_TEMPLATE = """\
 خبر کاملاً غیرورزشی فقط با اهمیت عمومی استثنایی و ذکر «خارج از زمین» در selection_reason؛ تغییر ظاهر سلبریتی این شرط را ندارد. ارتباط ورزشی اختراع نکن.
 وجود در خوراک sports مجوز خودکار انتخاب نیست. «مرتبط با ایران» هم مجوز خودکار نیست؛ باید جذاب باشد.
 
+## دقت ادعا و منبع (فقط برای تصمیم)
+وضعیت محتوا: {content_status}
+- اگر content_status برابر rss یا blocked است: فقط به اطلاعات صریح عنوان/خلاصه اتکا کن؛ جزئیات ناموجود را فرض نکن. محدودیت را در selection_reason بنویس. اگر اصل ادعا مبهم است decision=needs_review.
+- اگر full است: از متن کامل استفاده کن؛ از URL، تصویر، شهرت رسانه یا دانش قبلی خبر را تکمیل نکن.
+توافق، پیشنهاد، مذاکره، «در آستانه پیوستن»، انتقال نهایی و اعلام رسمی یکسان نیستند.
+
+## خروجی JSON (فقط همین کلیدها؛ بدون markdown و بدون متن اضافه)
+- "decision": یکی از select | reject | needs_review
+- "selection_reason": دلیل کوتاه تحریریه به فارسی (چرا برای مخاطب ایرانی قابل‌کلیک است / چرا حذف / چرا نیازمند بررسی)
+
+---
+Original Title: {title}
+Source: {source_name}
+Content status: {content_status}
+Raw Content:
+{content}
+---
+"""
+
+# ---------------------------------------------------------------------------
+# Stage 2 — rewrite only (no selection criteria; no meta talk in output).
+# ---------------------------------------------------------------------------
+REWRITE_PROMPT_TEMPLATE = """\
+تو فقط نویسندهٔ خبر «تازه‌نیوز» هستی. این خبر قبلاً برای انتشار انتخاب شده.
+فقط پیش‌نویس کاملاً فارسی بنویس (بیس خبر فارسی است). دربارهٔ انتخاب، حذف، فیلتر، جذابیت، مخاطب ایرانی، کلیک، بازدید، یا هر معیار تحریریه‌ای حرف نزن.
+
+## ممنوع مطلق در خروجی منتشرشونده
+در site_title، site_lead، site_body و telegram_text هرگز ننویس و اشاره نکن به:
+- مخاطب ایرانی / مردم ایران / کاربران ایرانی به‌عنوان مخاطب این خبر
+- جذابیت، کشش کلیک، قابل‌کلیک، بازدید، ویرال‌شدن نزد مخاطب
+- عوامل حذف، دلایل انتخاب/رد، فیلتر تحریریه، یادداشت داخلی، «چرا این خبر مهم است»
+فقط خودِ خبر را بنویس؛ فرامتنِ انتخاب/حذف به این مرحله مربوط نیست.
+
 ## دقت ادعا و منبع
 وضعیت محتوا: {content_status}
-- اگر content_status برابر rss یا blocked است: فقط به اطلاعات صریح عنوان/خلاصه اتکا کن؛ تحلیل، علت، نقل‌قول تازه، جزئیات قرارداد یا متن بلند نساز. پیش‌نویس را کوتاه و محدود نگه دار و محدودیت را در selection_reason بنویس. اگر اصل ادعا مبهم است decision=needs_review.
+- اگر content_status برابر rss یا blocked است: فقط به اطلاعات صریح عنوان/خلاصه اتکا کن؛ تحلیل، علت، نقل‌قول تازه، جزئیات قرارداد یا متن بلند نساز. پیش‌نویس را کوتاه و محدود نگه دار. اگر اصل ادعا مبهم است، محتاط و کوتاه بنویس.
 - اگر full است: از متن کامل استفاده کن؛ از URL، تصویر، شهرت رسانه یا دانش قبلی خبر را تکمیل نکن.
 توافق، پیشنهاد، مذاکره، «در آستانه پیوستن»، انتقال نهایی و اعلام رسمی یکسان نیستند. «پیوست» ننویس مگر قطعی باشد. ادعای یک رسانه را اعلام رسمی معرفی نکن.
 مبلغ انتقال را با دستمزد/کل ارزش قرارداد اشتباه نگیر؛ واحد پول، پاداش و «تا سقف» را حفظ کن. قرضی‌بودن و اختیار/الزام خرید را حذف نکن.
 ادعا یا اتهام را واقعیت اثبات‌شده ننویس. نام تیم/بازیکن/لیگ/زمان را دقیق نگه دار.
+کوتاهی تیتر هرگز نباید دقت، روشنی یا وضعیت قطعی/غیرقطعی خبر را مخدوش کند.
 
 ## تیتر (site_title)
 یک تیتر مستقل فارسی؛ معمولاً ۳ تا ۷ کلمه و در صورت نیاز تا حدود ۹ کلمه. برای کوتاه‌کردن، نام ضروری را حذف نکن.
@@ -157,16 +192,19 @@ PROMPT_TEMPLATE = """\
 پست مستقل کانال ورزشی فارسی (نه خلاصه سایت): تیتر کوتاه + پاراگراف کوتاه؛ نقل‌قول فقط اگر مهم؛ نتیجه بازی را روشن بنویس؛ انتقال/مصدومیت/قرارداد را برجسته کن؛ حدود ۴۰–۱۲۰ کلمه؛ حداکثر دو ایموجی مثل ⚽ یا 📌؛ بدون هشتگ و بدون HTML؛ در خط آخر دقیقاً:
 {channel_id}
 
-## زبان
-تقریباً تمام خروجی فارسی. نام بازیکن/مربی/باشگاه/رقابت را به صورت پذیرفته‌شده فارسی بنویس (لیونل مسی، منچستر یونایتد، لیگ قهرمانان اروپا). انگلیسی فقط برای برند بدون معادل فارسی. رقم فارسی، نیم‌فاصله طبیعی. نقل‌قول‌های داخل JSON را escape کن.
+## زبان (فقط فارسی)
+پایهٔ تمام خروجی (site_title، site_lead، site_body، telegram_text) باید فارسی باشد — حتی اگر منبع چینی، ژاپنی، کره‌ای، عربی، روسی، ترکی یا هر زبان دیگری باشد.
+جملات، افعال، حروف اضافه و واژه‌های عادی را از زبان مبدأ کپی نکن؛ معنی را به فارسی روان بازنویسی کن.
+هیچ نویسهٔ چینی/ژاپنی/کره‌ای/سیریلک و مشابه در خروجی نباشد.
+نام بازیکن/مربی/باشگاه/رقابت/شهر را با صورت پذیرفته‌شدهٔ فارسی بنویس (لیونل مسی، منچستر یونایتد، لیگ قهرمانان اروپا، کائورو میتومَا). اگر نام ناشناخته است، آوانویسی فارسی نزدیک به تلفظ رایج بنویس؛ اصل خارجی را داخل متن نگه ندار مگر هیچ صورت فارسی رایجی نباشد.
+انگلیسی فقط برای چند مورد محدود مجاز است: مخفف‌ها و اصطلاحات تخصصی فوتبال بدون معادل رایج فارسی (مثل VAR، FIFA، UEFA، OFF)، و برندهایی که صورت فارسی پذیرفته‌شده ندارند. جمله‌سازی انگلیسی ممنوع.
+رقم فارسی، نیم‌فاصله طبیعی. نقل‌قول‌های داخل JSON را escape کن.
 
 ## خروجی JSON (فقط همین کلیدها؛ بدون markdown و بدون متن اضافه)
-- "decision": یکی از select | reject | needs_review
-- "selection_reason": دلیل کوتاه تحریریه به فارسی (چرا برای مخاطب ایرانی قابل‌کلیک است / چرا حذف / چرا نیازمند بررسی)
-- "site_title": تیتر فارسی (برای reject خالی بگذار "")
-- "site_lead": لید (برای reject خالی)
-- "site_body": بدنه HTML سایت (برای reject خالی)
-- "telegram_text": متن تلگرام (برای reject خالی؛ برای select/needs_review با {channel_id} در انتها)
+- "site_title": تیتر فارسی
+- "site_lead": لید
+- "site_body": بدنه HTML سایت
+- "telegram_text": متن تلگرام با {channel_id} در انتها
 
 ---
 Original Title: {title}
@@ -282,11 +320,11 @@ def _extract_image_candidates(
 class Command(BaseCommand):
     help = (
         "Collect a 1-hour in-memory RSS pool from all active sources, "
-        "dedupe same stories by source priority, then rewrite newest-first "
-        "with Gemini into pending NewsArticle rows. "
-        f"At most {MAX_REWRITES_PER_RUN} articles per run, "
-        f"≥{GEMINI_MIN_INTERVAL_SECONDS // 60} minutes between Gemini requests. "
-        "URLs already in the database are never rewritten again."
+        "dedupe same stories by source priority, then for each candidate: "
+        "(1) editorial select/reject, (2) rewrite only if selected. "
+        f"At most {MAX_REWRITES_PER_RUN} LLM requests per run, "
+        f"≥{GEMINI_MIN_INTERVAL_SECONDS // 60} minutes between requests. "
+        "URLs already in the database are never sent to the LLM again."
     )
 
     def handle(self, *args: Any, **options: Any) -> None:
@@ -449,11 +487,52 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.HTTP_INFO(
                 f"  ⏳ waiting {remaining:.0f}s ({minutes:.1f} min) before next "
-                f"Gemini rewrite "
+                f"Gemini request "
                 f"({self._gemini_requests_done}/{MAX_REWRITES_PER_RUN} requests used)..."
             )
         )
         time.sleep(remaining)
+
+    def _call_llm_json(
+        self,
+        chat_client: ArvanChatClient,
+        model_name: str,
+        prompt: str,
+        required_keys: tuple[str, ...],
+        *,
+        stage: str,
+        temperature: float = 0.5,
+        max_tokens: int = 8000,
+    ) -> dict[str, Any]:
+        """One spaced Arvan JSON call; increments the per-run request budget."""
+        self._wait_for_gemini_slot()
+        self._gemini_requests_done += 1
+        self.stdout.write(self.style.HTTP_INFO(
+            f"  → Arvan LLM ({stage}) "
+            f"| model={model_name!r} "
+            f"| prompt={len(prompt)} chars "
+            f"| timeout={chat_client.config.timeout_seconds}s "
+            f"| request={self._gemini_requests_done}/{MAX_REWRITES_PER_RUN}"
+        ))
+        self._last_gemini_at = time.monotonic()
+
+        raw_text = chat_client.complete(
+            prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            json_mode=True,
+        )
+        if not raw_text.strip():
+            raise ValueError(f"Empty response from Arvan AI ({stage}).")
+
+        parsed = json.loads(_strip_markdown_fences(raw_text))
+        if not isinstance(parsed, dict):
+            raise ValueError(f"Arvan AI ({stage}) did not return a JSON object.")
+
+        missing = [k for k in required_keys if k not in parsed]
+        if missing:
+            raise ValueError(f"Missing keys in LLM {stage} response: {missing}")
+        return parsed
 
     def _scrape_log(self, message: str, error: bool = False) -> None:
         timestamp = time.strftime("%H:%M:%S")
@@ -469,7 +548,7 @@ class Command(BaseCommand):
         model_name: str,
         semantic_filter: SemanticDedupFilter,
     ) -> dict[str, int]:
-        """Run site semantic-dedup + scrape + Arvan rewrite for one pooled candidate."""
+        """Run site semantic-dedup + scrape + select then rewrite for one pooled candidate."""
         return self._process_entry(
             candidate.entry,
             candidate.source,
@@ -632,64 +711,38 @@ class Command(BaseCommand):
                 "be sent text-only."
             ))
 
-        prompt = PROMPT_TEMPLATE.format(
-            channel_id=TELEGRAM_CHANNEL_ID,
+        content_for_llm = clean_text[:8000]
+        select_prompt = SELECT_PROMPT_TEMPLATE.format(
             title=title,
             source_name=source.name,
             content_status=content_status,
-            content=clean_text[:8000],
+            content=content_for_llm,
         )
-
-        self._wait_for_gemini_slot()
-
-        self._gemini_requests_done += 1
-        self.stdout.write(self.style.HTTP_INFO(
-            f"  → Arvan LLM request "
-            f"| model={model_name!r} "
-            f"| prompt={len(prompt)} chars "
-            f"| timeout={chat_client.config.timeout_seconds}s "
-            f"| request={self._gemini_requests_done}/{MAX_REWRITES_PER_RUN}"
-        ))
-
-        # Stamp before the call so spacing is measured between request starts
-        # (and still ≥5 min even if a call fails).
-        self._last_gemini_at = time.monotonic()
+        last_prompt_chars = len(select_prompt)
 
         try:
-            raw_text = chat_client.complete(
-                prompt,
-                temperature=0.5,
-                max_tokens=8000,
-                json_mode=True,
+            # --- Stage 1: editorial select/reject only -----------------------
+            select_parsed = self._call_llm_json(
+                chat_client,
+                model_name,
+                select_prompt,
+                SELECT_KEYS,
+                stage="select",
+                temperature=0.3,
+                max_tokens=800,
             )
-            if not raw_text.strip():
-                raise ValueError("Empty response from Arvan AI.")
 
-            parsed = json.loads(_strip_markdown_fences(raw_text))
-            if not isinstance(parsed, dict):
-                raise ValueError("Arvan AI did not return a JSON object.")
-
-            missing = [k for k in REQUIRED_KEYS if k not in parsed]
-            if missing:
-                raise ValueError(f"Missing keys in LLM response: {missing}")
-
-            decision = str(parsed.get("decision") or "").strip().lower()
+            decision = str(select_parsed.get("decision") or "").strip().lower()
             if decision not in VALID_DECISIONS:
                 raise ValueError(f"Invalid decision from LLM: {decision!r}")
 
-            selection_reason = (parsed.get("selection_reason") or "").strip()
-            telegram_text = (parsed.get("telegram_text") or "").strip()
-            site_title = (parsed.get("site_title") or "").strip()
-            site_lead = (parsed.get("site_lead") or "").strip()
-            site_body = (parsed.get("site_body") or "").strip()
+            selection_reason = (select_parsed.get("selection_reason") or "").strip()
+            site_title = None
+            site_lead = None
+            site_body = None
+            telegram_text = None
 
             if decision in SELECT_DECISIONS:
-                if not site_title or not telegram_text:
-                    raise ValueError(
-                        f"decision={decision} requires site_title and telegram_text"
-                    )
-                if TELEGRAM_CHANNEL_ID not in telegram_text:
-                    telegram_text = f"{telegram_text}\n\n{TELEGRAM_CHANNEL_ID}".strip()
                 if decision == "needs_review" and selection_reason:
                     editorial_note = f"نیازمند بررسی: {selection_reason}"
                 elif selection_reason:
@@ -697,16 +750,44 @@ class Command(BaseCommand):
                 else:
                     editorial_note = None
                 article_status = NewsArticle.Status.PENDING
+
+                # --- Stage 2: rewrite only (no filter criteria in prompt) ---
+                rewrite_prompt = REWRITE_PROMPT_TEMPLATE.format(
+                    channel_id=TELEGRAM_CHANNEL_ID,
+                    title=title,
+                    source_name=source.name,
+                    content_status=content_status,
+                    content=content_for_llm,
+                )
+                last_prompt_chars = len(rewrite_prompt)
+                rewrite_parsed = self._call_llm_json(
+                    chat_client,
+                    model_name,
+                    rewrite_prompt,
+                    REWRITE_KEYS,
+                    stage="rewrite",
+                    temperature=0.5,
+                    max_tokens=8000,
+                )
+
+                site_title = (rewrite_parsed.get("site_title") or "").strip()
+                site_lead = (rewrite_parsed.get("site_lead") or "").strip()
+                site_body = (rewrite_parsed.get("site_body") or "").strip()
+                telegram_text = (rewrite_parsed.get("telegram_text") or "").strip()
+
+                if not site_title or not telegram_text:
+                    raise ValueError(
+                        f"rewrite for decision={decision} requires "
+                        "site_title and telegram_text"
+                    )
+                if TELEGRAM_CHANNEL_ID not in telegram_text:
+                    telegram_text = f"{telegram_text}\n\n{TELEGRAM_CHANNEL_ID}".strip()
             else:
                 editorial_note = (
                     f"حذف عامل: {selection_reason}" if selection_reason
                     else "حذف عامل: کم‌جذاب یا کم‌کلیک برای مخاطب ایرانی"
                 )
                 article_status = NewsArticle.Status.REJECTED
-                site_title = site_title or None
-                site_lead = None
-                site_body = None
-                telegram_text = None
 
             # Re-check after the (slow) LLM call — another worker may have
             # inserted the same URL while we were waiting.
@@ -772,7 +853,7 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR(
                 f"    model={model_name!r}, "
                 f"timeout={chat_client.config.timeout_seconds}s, "
-                f"prompt size={len(prompt)} chars"
+                f"prompt size={last_prompt_chars} chars"
             ))
             self.stderr.write(self.style.ERROR(traceback.format_exc()))
             stats["errors"] += 1
