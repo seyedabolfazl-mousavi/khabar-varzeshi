@@ -41,6 +41,7 @@ pydantic
 pydantic_core==2.46.4
 pyparsing==3.3.2
 aiogram
+pyTelegramBotAPI>=4.14.0
 python-dotenv==1.2.2
 selenium>=4.25.0
 webdriver-manager>=4.0.2

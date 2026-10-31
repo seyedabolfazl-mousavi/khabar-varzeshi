@@ -37,9 +37,11 @@ class ArvanChatClient:
             "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
+            # Haiku otherwise spends the whole token budget on hidden reasoning
+            # and returns content=null with finish_reason=length.
+            "thinking": {"type": "disabled"},
         }
         if json_mode:
-            # Best-effort; some gateways ignore unknown fields.
             payload["response_format"] = {"type": "json_object"}
 
         try:
@@ -50,13 +52,30 @@ class ArvanChatClient:
                 timeout=self.config.timeout_seconds,
             )
         except ArvanAIRequestError as exc:
-            # Retry once without response_format if the gateway rejects it.
-            if json_mode and exc.status_code in {400, 422}:
+            if exc.status_code in {400, 422} and "thinking" in payload:
                 logger.warning(
-                    "Arvan chat rejected json_mode (%s); retrying without "
-                    "response_format.",
+                    "AvalAI rejected thinking=disabled (%s); retrying without it.",
                     exc.status_code,
                 )
+                payload.pop("thinking", None)
+                try:
+                    data = post_json(
+                        self.config.chat_url,
+                        api_key=self.config.api_key,
+                        payload=payload,
+                        timeout=self.config.timeout_seconds,
+                    )
+                except ArvanAIRequestError as retry_exc:
+                    if retry_exc.status_code not in {400, 422} or "response_format" not in payload:
+                        raise
+                    payload.pop("response_format", None)
+                    data = post_json(
+                        self.config.chat_url,
+                        api_key=self.config.api_key,
+                        payload=payload,
+                        timeout=self.config.timeout_seconds,
+                    )
+            elif exc.status_code in {400, 422} and "response_format" in payload:
                 payload.pop("response_format", None)
                 data = post_json(
                     self.config.chat_url,
@@ -69,7 +88,7 @@ class ArvanChatClient:
 
         choices = data.get("choices") or []
         if not choices:
-            raise ValueError(f"Arvan chat returned no choices: {data!r}")
+            raise ValueError("AvalAI chat returned no choices.")
 
         message = choices[0].get("message") or {}
         content = message.get("content")
@@ -82,5 +101,6 @@ class ArvanChatClient:
             ]
             content = "".join(parts)
         if not isinstance(content, str) or not content.strip():
-            raise ValueError(f"Arvan chat returned empty content: {data!r}")
+            finish = choices[0].get("finish_reason")
+            raise ValueError(f"AvalAI returned empty content (finish_reason={finish}).")
         return content.strip()
