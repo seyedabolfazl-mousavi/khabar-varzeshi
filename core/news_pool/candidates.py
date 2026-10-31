@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -18,6 +18,7 @@ class PoolCandidate:
     description: str
     pub_date: datetime
     priority: int
+    corroborating_sources: list[str] = field(default_factory=list)
 
     @property
     def source_name(self) -> str:

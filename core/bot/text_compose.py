@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-SITE_LINK_ANCHOR = "در سایت تازه‌نیوز بخوانید"
-DEFAULT_FOOTER = "@tazenews"
+SITE_LINK_ANCHOR = "در سایت نماد صنعت بخوانید"
+DEFAULT_FOOTER = "نماد صنعت"
 
 _LINK_HTML_RE = re.compile(
     rf'<a\s+href=["\']([^"\']+)["\']\s*>\s*{re.escape(SITE_LINK_ANCHOR)}\s*</a>',

@@ -1,8 +1,8 @@
-"""Hourly news pool ingestion: collect recent RSS items, priority-dedupe,
-filter editorially, rewrite selected items, and persist as pending NewsArticle rows.
+"""Ingest نماد صنعت: score suitability cheaply, rewrite only approvals.
 
-Selection (keep/reject) and rewrite are separate LLM stages so filter criteria
-never appear in published title/body/telegram text.
+Gemini embeddings are not called. The model scores a short RSS snippet, and
+only an approved score is scraped and rewritten. That keeps the API bill on
+the articles that can actually be published.
 
 Run with:
 
@@ -12,7 +12,6 @@ Run with:
 from __future__ import annotations
 
 # --- Force IPv4 for ALL outbound HTTP traffic ---------------------------------
-# Must run BEFORE any HTTP client (urllib3, httpx, etc.) is initialized.
 import socket
 
 import urllib3.util.connection as urllib3_cn
@@ -32,850 +31,725 @@ socket.getaddrinfo = _ipv4_only_getaddrinfo
 import json
 import os
 import re
+import sys
 import time
 import traceback
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import feedparser
-import httpx
-from bs4 import BeautifulSoup
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import IntegrityError
+from django.utils import timezone
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
-from requests.exceptions import ConnectTimeout as RequestsConnectTimeout
-from requests.exceptions import ReadTimeout as RequestsReadTimeout
-from requests.exceptions import Timeout as RequestsTimeout
 
 from core.article_scraper import _clean_html_to_text, scrape_article_html
 from core.arvan_ai import ArvanAIRequestError, ArvanChatClient, load_arvan_ai_config
-from core.models import NewsArticle, RssSource
-from core.news_pool import (
-    collect_recent_pool,
-    dedupe_pool_by_priority,
-    load_news_pool_config,
+from core.editorial.config import EditorialConfig, load_editorial_config
+from core.editorial.persian import persian_problems
+from core.editorial.prompts import (
+    REPAIR_PROMPT_TEMPLATE,
+    REWRITE_PROMPT_TEMPLATE,
+    SCORE_PROMPT_TEMPLATE,
 )
+from core.editorial.taxonomy import (
+    AXES,
+    BRAND_NAME,
+    CATEGORIES,
+    REGIONS,
+    canonicalize,
+    canonicalize_axes,
+)
+from core.models import NewsArticle, RssSource
+from core.news_pool import collect_recent_pool, load_news_pool_config
 from core.news_pool.candidates import PoolCandidate
-from core.semantic_dedup import SemanticDedupFilter, build_semantic_dedup_filter
+from core.news_pool.lexical import dedupe_pool_lexical
 from core.topic_filter import assess_topic
-from django.conf import settings
-from dotenv import load_dotenv
-
 from core.url_utils import normalize_article_url
 
-
-DEFAULT_ARVAN_MODEL = "Gemini-3.1-Flash-Lite-Preview"
-GEMINI_REQUEST_TIMEOUT = 120  # seconds (legacy name; used for logging)
-
-load_dotenv(settings.BASE_DIR / ".env")
-TELEGRAM_CHANNEL_ID = (
-    os.getenv("TELEGRAM_PUBLIC_CHANNEL_ID", "").strip()
-    or "@tazenews"
-)
-
-# Per-run rewrite budget and spacing between Gemini calls.
-# Already-stored article URLs are never sent to Gemini again (see _article_exists).
-MAX_REWRITES_PER_RUN = 20
-GEMINI_MIN_INTERVAL_SECONDS = 5 * 60  # 5 minutes between rewrite requests
-
-# Every timeout-shaped exception we may encounter from any HTTP library.
-TIMEOUT_EXCEPTIONS: tuple[type[BaseException], ...] = (
-    httpx.ReadTimeout,
-    httpx.ConnectTimeout,
-    httpx.PoolTimeout,
-    httpx.TimeoutException,
-    RequestsReadTimeout,
-    RequestsConnectTimeout,
-    RequestsTimeout,
-    TimeoutError,
-    ArvanAIRequestError,
-)
-
-# Keys required from each separate LLM stage.
-SELECT_KEYS = ("decision", "selection_reason")
-REWRITE_KEYS = ("site_title", "site_lead", "site_body", "telegram_text")
-SELECT_DECISIONS = frozenset({"select", "needs_review"})
-VALID_DECISIONS = frozenset({"select", "reject", "needs_review"})
-
-# Matches an opening ``` or ```json fence, and the closing ``` fence.
 _FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
+_TAG_RE = re.compile(
+    r"</?(?!h2\b|p\b|a\b|/h2|/p|/a)[a-zA-Z][^>]*>",
+    re.IGNORECASE,
+)
+_TEHRAN = ZoneInfo("Asia/Tehran")
 
-# ---------------------------------------------------------------------------
-# Stage 1 — editorial filter only (never writes published title/body).
-# ---------------------------------------------------------------------------
-SELECT_PROMPT_TEMPLATE = """\
-تو فقط فیلتر تحریریهٔ «تازه‌نیوز» هستی. فقط تصمیم بگیر این خبر را نگه داریم یا حذف کنیم.
-هیچ تیتر، لید، متن سایت یا پست تلگرام ننویس. اولویت با فوتبال است.
-
-## اصل سخت‌گیرانهٔ انتخاب
-هدف: پیشنهاد خبرهایی که مردم ایران واقعاً دوست دارند باز کنند، بخوانند و به اشتراک بگذارند — نه هر خبر ورزشی درست یا صرفاً مرتبط با ایران.
-مرتبط‌بودن با ایران شرط لازم نیست. خبر جهانی/اروپایی/آسیایی هم اگر برای مخاطب ایرانی کشش کلیک و بازدید داشته باشد، انتخاب کن.
-اما سخت‌گیر باش: اگر شک داری که کسی تیتر را باز کند، یا خبر روزمره/کم‌حاشیه/فقط برای طرفداران محلی است → decision=reject.
-برای پُرکردن فهرست، خبر متوسط یا ضعیف اضافه نکن.
-
-## ترتیب تصمیم
-۱) اعتبار و کفایت اطلاعات  ۲) پتانسیل کلیک/بازدید نزد مخاطب ایرانی  ۳) ارزش خبری و حاشیه  ۴) تازگی و تفاوت با خبرهای قبلی.
-
-## جذابیت کلیک و بازدید (معیار اصلی)
-از خودت بپرس: مخاطب ایرانی معمولی کانال/سایت ورزشی، با دیدن این تیتر، چقدر احتمال دارد کلیک کند؟
-عوامل مثبت (هرچه بیشتر، بهتر): ستاره یا تیم بسیار آشنا برای ایرانی‌ها؛ انتقال بزرگ؛ اخراج/جنجال مربی؛ درگیری/کارت قرمز/حاشیه؛ نتیجه غافلگیرکننده؛ رکورد؛ مبلغ چشمگیر؛ رقابت حساس؛ داستان انسانی قوی؛ طنز یا لحظه وایرال ورزشی؛ رویداد بزرگ جهانی که همه درباره‌اش حرف می‌زنند.
-عوامل منفی → معمولاً reject: گزارش مصدومیت روزمره بازیکن گمنام؛ ترکیب احتمالی معمولی؛ پیش‌نمایش کم‌اهمیت؛ آمار خشک بدون داستان؛ نقل‌قول خنثی؛ خبر داخلی باشگاه کوچک؛ پوشش روزمره لیگ‌های کم‌بیننده نزد ایرانی‌ها؛ تکرار همان خبر با زاویه ضعیف‌تر.
-نام مشهور یا عدد بزرگ به‌تنهایی کافی نیست؛ باید اتفاق یا زاویهٔ واقعاً جذاب باشد.
-
-## ارزش خبری در selection_reason
-در یک جمله بگو: چه اتفاقی افتاده و چرا مخاطب ایرانی ممکن است کلیک کند؟ (یا چرا حذف/بررسی لازم است). صریحاً به کشش بازدید/جذابیت اشاره کن وقتی select می‌کنی. این متن فقط یادداشت داخلی تحریریه است.
-
-## محدوده موضوعی
-انتخاب کن اگر جذاب است: فوتبال ایران و تیم ملی؛ ستاره‌ها و تیم‌های بزرگ اروپا و جهان؛ لیگ‌های سطح اول و مسابقات مهم؛ حاشیه‌ها و اتفاقات وایرال فوتبال؛ موارد نادر در سایر ورزش‌ها فقط وقتی چهره/رویداد برای ایرانی‌ها خیلی شناخته‌شده یا وایرال است.
-حذف کن: اخبار معمول دسته‌های پایین، تیم محلی/دانشگاهی/ذخیره/پایه، پوشش روزمره کریکت/فوتبال آمریکایی/بیسبال/هاکی/دوچرخه/تنیس/بسکتبال/والیبال/گلف و مشابه — مگر استثنای روشن با کشش بالا نزد مخاطب ایرانی.
-خبر کاملاً غیرورزشی فقط با اهمیت عمومی استثنایی و ذکر «خارج از زمین» در selection_reason؛ تغییر ظاهر سلبریتی این شرط را ندارد. ارتباط ورزشی اختراع نکن.
-وجود در خوراک sports مجوز خودکار انتخاب نیست. «مرتبط با ایران» هم مجوز خودکار نیست؛ باید جذاب باشد.
-
-## دقت ادعا و منبع (فقط برای تصمیم)
-وضعیت محتوا: {content_status}
-- اگر content_status برابر rss یا blocked است: فقط به اطلاعات صریح عنوان/خلاصه اتکا کن؛ جزئیات ناموجود را فرض نکن. محدودیت را در selection_reason بنویس. اگر اصل ادعا مبهم است decision=needs_review.
-- اگر full است: از متن کامل استفاده کن؛ از URL، تصویر، شهرت رسانه یا دانش قبلی خبر را تکمیل نکن.
-توافق، پیشنهاد، مذاکره، «در آستانه پیوستن»، انتقال نهایی و اعلام رسمی یکسان نیستند.
-
-## خروجی JSON (فقط همین کلیدها؛ بدون markdown و بدون متن اضافه)
-- "decision": یکی از select | reject | needs_review
-- "selection_reason": دلیل کوتاه تحریریه به فارسی (چرا برای مخاطب ایرانی قابل‌کلیک است / چرا حذف / چرا نیازمند بررسی)
-
----
-Original Title: {title}
-Source: {source_name}
-Content status: {content_status}
-Raw Content:
-{content}
----
-"""
-
-# ---------------------------------------------------------------------------
-# Stage 2 — rewrite only (no selection criteria; no meta talk in output).
-# ---------------------------------------------------------------------------
-REWRITE_PROMPT_TEMPLATE = """\
-تو فقط نویسندهٔ خبر «تازه‌نیوز» هستی. این خبر قبلاً برای انتشار انتخاب شده.
-فقط پیش‌نویس کاملاً فارسی بنویس (بیس خبر فارسی است). دربارهٔ انتخاب، حذف، فیلتر، جذابیت، مخاطب ایرانی، کلیک، بازدید، یا هر معیار تحریریه‌ای حرف نزن.
-
-## ممنوع مطلق در خروجی منتشرشونده
-در site_title، site_lead، site_body و telegram_text هرگز ننویس و اشاره نکن به:
-- مخاطب ایرانی / مردم ایران / کاربران ایرانی به‌عنوان مخاطب این خبر
-- جذابیت، کشش کلیک، قابل‌کلیک، بازدید، ویرال‌شدن نزد مخاطب
-- عوامل حذف، دلایل انتخاب/رد، فیلتر تحریریه، یادداشت داخلی، «چرا این خبر مهم است»
-فقط خودِ خبر را بنویس؛ فرامتنِ انتخاب/حذف به این مرحله مربوط نیست.
-
-## دقت ادعا و منبع
-وضعیت محتوا: {content_status}
-- اگر content_status برابر rss یا blocked است: فقط به اطلاعات صریح عنوان/خلاصه اتکا کن؛ تحلیل، علت، نقل‌قول تازه، جزئیات قرارداد یا متن بلند نساز. پیش‌نویس را کوتاه و محدود نگه دار. اگر اصل ادعا مبهم است، محتاط و کوتاه بنویس.
-- اگر full است: از متن کامل استفاده کن؛ از URL، تصویر، شهرت رسانه یا دانش قبلی خبر را تکمیل نکن.
-توافق، پیشنهاد، مذاکره، «در آستانه پیوستن»، انتقال نهایی و اعلام رسمی یکسان نیستند. «پیوست» ننویس مگر قطعی باشد. ادعای یک رسانه را اعلام رسمی معرفی نکن.
-مبلغ انتقال را با دستمزد/کل ارزش قرارداد اشتباه نگیر؛ واحد پول، پاداش و «تا سقف» را حفظ کن. قرضی‌بودن و اختیار/الزام خرید را حذف نکن.
-ادعا یا اتهام را واقعیت اثبات‌شده ننویس. نام تیم/بازیکن/لیگ/زمان را دقیق نگه دار.
-کوتاهی تیتر هرگز نباید دقت، روشنی یا وضعیت قطعی/غیرقطعی خبر را مخدوش کند.
-
-## تیتر (site_title)
-یک تیتر مستقل فارسی؛ معمولاً ۳ تا ۷ کلمه و در صورت نیاز تا حدود ۹ کلمه. برای کوتاه‌کردن، نام ضروری را حذف نکن.
-کاربرد محدود «/»: فقط اگر تیتر خیلی کوتاه برای فهم دقیق به توضیح نیاز دارد، پس از «/» جمله‌ای با فعل در حدود ۶ تا ۸ کلمه بیاور؛ بخش دوم بخش اول را تکرار نکند. تیتر کامل ۸–۹ کلمه‌ای معمولاً بخش دوم نمی‌خواهد.
-اصل اتفاق، تغییر، عدد معنادار یا پیامد مستند را جلو بیاور. به‌جای نام کم‌شناخته، سمت آشنا و دقیق بنویس (مثل «مالک آرسنال»، «مدیر اجرایی لالیگا»)؛ نام کامل در لید/متن بماند. نام ستاره‌های شناخته‌شده را حذف نکن. «منچستر» را به‌جای نام دقیق باشگاه ننویس.
-شروع‌هایی مثل «بررسی وضعیت»، «تحلیلی بر»، «گزارش تحولات» و عبارت‌های اداری مثل «با هدف تقویت ترکیب»، «در راستای»، «موفق به جذب شد» را مگر ضروری حذف کن.
-«بمب»، «شوک»، «زلزله»، «باورنکردنی» الزامی نیستند؛ فقط برای اتفاق واقعاً بزرگ با شواهد روشن و بدون تکرار در بسته. «فوری» فقط برای تحول واقعاً فوری.
-«چرا/چگونه» فقط وقتی متن پاسخ مستند دارد. نتیجه یا علت بیرون از متن اضافه نکن.
-منبع، URL، نام رسانه، هشتگ و ایموجی داخل تیتر نباشد.
-
-## لید و متن سایت
-- site_lead: ۲–۳ جمله رسمی فارسی؛ مهم‌ترین واقعیت‌ها؛ جزئیات تکمیلی اینجا بیاید نه در تیتر.
-- site_body: HTML فارسی فقط با <h2> و <p>؛ حداقل دو <h2> وقتی محتوا کافی است. بازنویسی طبیعی، نه ترجمه جمله‌به‌جمله. تکرار نکن. اگر محتوا ناقص است، کوتاه بنویس و بخش‌های تحلیلی اختراع نکن.
-
-## تلگرام (telegram_text)
-پست مستقل کانال ورزشی فارسی (نه خلاصه سایت): تیتر کوتاه + پاراگراف کوتاه؛ نقل‌قول فقط اگر مهم؛ نتیجه بازی را روشن بنویس؛ انتقال/مصدومیت/قرارداد را برجسته کن؛ حدود ۴۰–۱۲۰ کلمه؛ حداکثر دو ایموجی مثل ⚽ یا 📌؛ بدون هشتگ و بدون HTML؛ در خط آخر دقیقاً:
-{channel_id}
-
-## زبان (فقط فارسی)
-پایهٔ تمام خروجی (site_title، site_lead، site_body، telegram_text) باید فارسی باشد — حتی اگر منبع چینی، ژاپنی، کره‌ای، عربی، روسی، ترکی یا هر زبان دیگری باشد.
-جملات، افعال، حروف اضافه و واژه‌های عادی را از زبان مبدأ کپی نکن؛ معنی را به فارسی روان بازنویسی کن.
-هیچ نویسهٔ چینی/ژاپنی/کره‌ای/سیریلک و مشابه در خروجی نباشد.
-نام بازیکن/مربی/باشگاه/رقابت/شهر را با صورت پذیرفته‌شدهٔ فارسی بنویس (لیونل مسی، منچستر یونایتد، لیگ قهرمانان اروپا، کائورو میتومَا). اگر نام ناشناخته است، آوانویسی فارسی نزدیک به تلفظ رایج بنویس؛ اصل خارجی را داخل متن نگه ندار مگر هیچ صورت فارسی رایجی نباشد.
-انگلیسی فقط برای چند مورد محدود مجاز است: مخفف‌ها و اصطلاحات تخصصی فوتبال بدون معادل رایج فارسی (مثل VAR، FIFA، UEFA، OFF)، و برندهایی که صورت فارسی پذیرفته‌شده ندارند. جمله‌سازی انگلیسی ممنوع.
-رقم فارسی، نیم‌فاصله طبیعی. نقل‌قول‌های داخل JSON را escape کن.
-
-## خروجی JSON (فقط همین کلیدها؛ بدون markdown و بدون متن اضافه)
-- "site_title": تیتر فارسی
-- "site_lead": لید
-- "site_body": بدنه HTML سایت
-- "telegram_text": متن تلگرام با {channel_id} در انتها
-
----
-Original Title: {title}
-Source: {source_name}
-Content status: {content_status}
-Raw Content:
-{content}
----
-"""
+SCORE_KEYS = ("score", "approve", "category", "region", "reason")
+REWRITE_KEYS = ("site_title", "site_lead", "site_body", "telegram_text")
 
 
 def _strip_markdown_fences(text: str) -> str:
-    """Remove ```json ... ``` (or plain ```) wrappers Gemini sometimes adds."""
-    if not text:
-        return ""
-    cleaned = text.strip()
+    cleaned = (text or "").strip()
     cleaned = _FENCE_RE.sub("", cleaned)
     cleaned = _FENCE_RE.sub("", cleaned)
     return cleaned.strip()
 
 
-
-# Image URLs hosted by these CDNs occasionally don't load when fetched by
-# Telegram's servers. We don't filter them out — Telegram will reject them
-# with an ApiTelegramException and the bot will gracefully fall back to text.
-_IMG_EXT_RE = re.compile(r"\.(?:jpe?g|png|gif|webp|bmp)(?:\?.*)?$", re.IGNORECASE)
-
-
-def _looks_like_image_url(url: str, mime: str = "") -> bool:
-    if not url or not isinstance(url, str):
-        return False
-    if mime and mime.lower().startswith("image/"):
-        return True
-    return bool(_IMG_EXT_RE.search(url))
+def _as_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"true", "1", "yes", "approve"}
 
 
-def _extract_image_candidates(
-    entry: feedparser.FeedParserDict,
-    raw_html: str,
-) -> list[tuple[str, str]]:
-    """Return [(source, url), ...] for every image URL we can find on the entry.
+def _as_score(value: object) -> int:
+    try:
+        score = int(float(value))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(100, score))
 
-    Sources tried, in priority order, mirror the most common RSS conventions:
 
-      1. media:thumbnail   (Yahoo Media RSS — `entry.media_thumbnail`)
-      2. media:content     (Yahoo Media RSS — `entry.media_content`,
-                            filtered to image/* types)
-      3. enclosure         (RSS 2.0 standard — `entry.enclosures`,
-                            filtered to image MIME types)
-      4. <img src="..."/>  (first image in the HTML body)
-      5. entry.image       (RSS 1.0 / Atom — sometimes `{href: ...}`)
-      6. entry.itunes_image, entry.links rel=enclosure as a last resort
-    """
-    candidates: list[tuple[str, str]] = []
+def _sanitize_body(html: str) -> str:
+    text = (html or "").strip()
+    text = re.sub(r"(?is)<script[^>]*>.*?</script>", "", text)
+    text = re.sub(r"(?is)<style[^>]*>.*?</style>", "", text)
+    return _TAG_RE.sub("", text).strip()
 
-    thumbnails = getattr(entry, "media_thumbnail", None) or []
-    for t in thumbnails:
-        url = t.get("url") if isinstance(t, dict) else None
-        if _looks_like_image_url(url or ""):
-            candidates.append(("media:thumbnail", url))
 
-    media_contents = getattr(entry, "media_content", None) or []
-    for m in media_contents:
-        if not isinstance(m, dict):
-            continue
-        url = m.get("url")
-        mime = m.get("type", "") or m.get("medium", "")
-        if _looks_like_image_url(url or "", mime):
-            candidates.append(("media:content", url))
-
-    enclosures = getattr(entry, "enclosures", None) or []
-    for e in enclosures:
-        if not isinstance(e, dict):
-            continue
-        url = e.get("url") or e.get("href")
-        mime = e.get("type", "")
-        if _looks_like_image_url(url or "", mime):
-            candidates.append(("enclosure", url))
-
-    if raw_html:
-        try:
-            soup = BeautifulSoup(raw_html, "html.parser")
-            img_tag = soup.find("img")
-            if img_tag and img_tag.get("src"):
-                candidates.append(("html_img", img_tag["src"]))
-        except Exception:
-            pass
-
-    image_field = getattr(entry, "image", None)
-    if isinstance(image_field, dict):
-        url = image_field.get("href") or image_field.get("url")
-        if _looks_like_image_url(url or ""):
-            candidates.append(("entry.image", url))
-
-    itunes_image = getattr(entry, "itunes_image", None)
-    if isinstance(itunes_image, dict):
-        url = itunes_image.get("href")
-        if _looks_like_image_url(url or ""):
-            candidates.append(("itunes_image", url))
-
-    for link in getattr(entry, "links", None) or []:
-        if not isinstance(link, dict):
-            continue
-        if link.get("rel") == "enclosure":
-            url = link.get("href")
-            mime = link.get("type", "")
-            if _looks_like_image_url(url or "", mime):
-                candidates.append(("link[rel=enclosure]", url))
-
-    return candidates
+def _joined_text(*parts: str | None) -> str:
+    return "\n".join(part for part in parts if part)
 
 
 class Command(BaseCommand):
     help = (
-        "Collect a 1-hour in-memory RSS pool from all active sources, "
-        "dedupe same stories by source priority, then for each candidate: "
-        "(1) editorial select/reject, (2) rewrite only if selected. "
-        f"At most {MAX_REWRITES_PER_RUN} LLM requests per run, "
-        f"≥{GEMINI_MIN_INTERVAL_SECONDS // 60} minutes between requests. "
-        "URLs already in the database are never sent to the LLM again."
+        "Collect active RSS feeds, drop same-story duplicates without embeddings, "
+        "score each new item for نماد صنعت, and rewrite only approved items."
     )
 
     def handle(self, *args: Any, **options: Any) -> None:
+        for stream in (sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if reconfigure is not None:
+                try:
+                    reconfigure(encoding="utf-8", errors="replace")
+                except Exception:
+                    pass
         load_dotenv(settings.BASE_DIR / ".env")
-
         try:
             arvan_config = load_arvan_ai_config()
         except ValueError as exc:
             raise CommandError(str(exc)) from exc
 
-        gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        if not gemini_api_key or gemini_api_key == "your_api_key_here":
-            raise CommandError(
-                "GEMINI_API_KEY is not set. Required for embeddings "
-                "(semantic dedup / news pool). Add it to your .env file."
-            )
-
         chat_client = ArvanChatClient(arvan_config)
-        model_name = arvan_config.model
+        editorial = load_editorial_config()
         pool_config = load_news_pool_config()
+        channel_id = os.getenv("TELEGRAM_PUBLIC_CHANNEL_ID", "").strip() or BRAND_NAME
 
-        # Direct Google Gemini client — embeddings only (unchanged from before).
-        embed_client = genai.Client(
-            api_key=gemini_api_key,
-            http_options=types.HttpOptions(
-                timeout=GEMINI_REQUEST_TIMEOUT * 1000,
-            ),
-        )
+        self.editorial = editorial
+        self.channel_id = channel_id
+        self.chat_client = chat_client
+        self.model_name = arvan_config.model
+        self._scores_done = 0
+        self._rewrites_done = 0
+        self._auth_failed = False
+        self._last_llm_at: float | None = None
 
+        published_today = self._published_today()
+        self.stdout.write(f"Rewrite model: {self.model_name} (embeddings off)")
         self.stdout.write(
-            f"Rewrite via Arvan AI model: {model_name}"
-        )
-        self.stdout.write(f"Chat endpoint: {arvan_config.chat_url}")
-        self.stdout.write(
-            "Embeddings via Google Gemini (direct API) — unchanged."
-        )
-        self.stdout.write(
-            f"Rewrite budget this run: {MAX_REWRITES_PER_RUN} LLM requests, "
-            f"min {GEMINI_MIN_INTERVAL_SECONDS // 60} min between them."
-        )
-        self.stdout.write(
-            f"News pool: lookback={pool_config.lookback_hours:g}h, "
-            f"cross-source dedup threshold={pool_config.dedup_threshold:.2f}."
+            f"Budget: score<={editorial.max_scores_per_run}/run, "
+            f"rewrite<={editorial.max_rewrites_per_run}/run, "
+            f"daily cap {editorial.daily_cap} "
+            f"({published_today} already written today), "
+            f"approve at score≥{editorial.score_threshold}."
         )
 
-        # Per-run counters: at most MAX_REWRITES_PER_RUN LLM calls.
-        # Already-stored URLs are never rewritten again (DB uniqueness).
-        self._gemini_requests_done = 0
-        self._last_gemini_at: float | None = None
+        if published_today >= editorial.daily_cap:
+            self.stdout.write(self.style.WARNING(
+                "Daily cap already reached. No score or rewrite calls this run."
+            ))
+            return
 
-        def _dedup_log(message: str) -> None:
-            self.stdout.write(self.style.HTTP_INFO(f"  [semantic-dedup] {message}"))
-
-        def _pool_log(message: str) -> None:
-            self.stdout.write(self.style.HTTP_INFO(f"  [news-pool] {message}"))
-
-        semantic_filter = build_semantic_dedup_filter(
-            embed_client,
-            log=_dedup_log,
-        )
-
-        sources = list(
-            RssSource.objects.filter(is_active=True).order_by("priority", "name")
-        )
+        sources = list(RssSource.objects.filter(is_active=True).order_by("priority", "name"))
         if not sources:
             self.stdout.write(self.style.WARNING("No active RSS sources found."))
             return
 
-        # --- Phase 1: short-term pool (last N hours from all feeds) ----------
-        collect_result = collect_recent_pool(
-            sources,
-            config=pool_config,
-            log=_pool_log,
-        )
+        def _pool_log(message: str) -> None:
+            self.stdout.write(self.style.HTTP_INFO(f"  [news-pool] {message}"))
 
-        # --- Phase 2: same-story collapse by source priority -----------------
-        dedupe_result = dedupe_pool_by_priority(
-            collect_result.candidates,
-            embedding_service=semantic_filter.embedding_service,
-            config=pool_config,
-            log=_pool_log,
-        )
-        queue = dedupe_result.candidates
-
-        self.stdout.write(
-            self.style.MIGRATE_HEADING(
-                f"\n>>> Processing pool "
-                f"({len(queue)} candidates after priority dedupe, "
-                f"newest first)"
-            )
-        )
+        collect_result = collect_recent_pool(sources, config=pool_config, log=_pool_log)
+        deduped = dedupe_pool_lexical(collect_result.candidates, log=_pool_log)
 
         totals = {
             "created": 0,
-            "rejected_by_llm": 0,
+            "queued": 0,
+            "rejected": 0,
             "topic_skipped": 0,
             "skipped": 0,
-            "semantic_skipped": 0,
             "errors": 0,
-            "pool_dropped": dedupe_result.stats.dropped,
+            "pool_dropped": deduped.stats.dropped,
         }
-        limit_reached = False
+        totals["created"] += self._drain_queue()
 
-        for index, candidate in enumerate(queue, start=1):
-            if self._gemini_requests_done >= MAX_REWRITES_PER_RUN:
-                limit_reached = True
+        for index, candidate in enumerate(deduped.candidates, start=1):
+            if self._published_today() >= editorial.daily_cap:
+                self.stdout.write(self.style.WARNING("Daily cap reached."))
+                break
+            if self._rewrites_done >= editorial.max_rewrites_per_run and self._queue_is_full():
+                self.stdout.write(self.style.WARNING(
+                    "Rewrite budget and queue are full. Remaining items wait."
+                ))
+                break
+            if getattr(self, "_auth_failed", False):
+                self.stdout.write(self.style.ERROR(
+                    "Stopped after an authorization failure. No further API calls."
+                ))
+                break
+            if self._scores_done >= editorial.max_scores_per_run:
+                self.stdout.write(self.style.WARNING(
+                    "Score budget reached. Unscored items stay in the lookback window."
+                ))
                 break
 
-            self.stdout.write(
-                self.style.HTTP_INFO(
-                    f"\n  [{index}/{len(queue)}] "
-                    f"{candidate.pub_date.isoformat()} | "
-                    f"p={candidate.priority} | {candidate.source_name} | "
-                    f"{candidate.title[:70]}"
-                )
-            )
-
-            stats = self._process_candidate(
-                candidate,
-                chat_client,
-                model_name,
-                semantic_filter,
-            )
+            self.stdout.write(self.style.HTTP_INFO(
+                f"\n  [{index}/{len(deduped.candidates)}] "
+                f"p={candidate.priority} | {candidate.source_name} | {candidate.title[:70]}"
+            ))
+            stats = self._process_candidate(candidate)
             for key, value in stats.items():
                 totals[key] += value
 
-        if limit_reached:
-            self.stdout.write(
-                self.style.WARNING(
-                    f"\nReached rewrite budget ({MAX_REWRITES_PER_RUN} LLM "
-                    "requests). Remaining pool items will wait for the next "
-                    "hourly cycle (if still within the lookback window)."
-                )
-            )
+        self.stdout.write(self.style.SUCCESS(
+            "\nDone. "
+            f"Created: {totals['created']}, "
+            f"queued: {totals['queued']}, "
+            f"rejected: {totals['rejected']}, "
+            f"topic-skipped: {totals['topic_skipped']}, "
+            f"url-skipped: {totals['skipped']}, "
+            f"lexical-dropped: {totals['pool_dropped']}, "
+            f"errors: {totals['errors']}. "
+            f"LLM scores={self._scores_done}, rewrites={self._rewrites_done}."
+        ))
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                "\nDone. "
-                f"Created (pending): {totals['created']}, "
-                f"rejected by editorial filter: {totals['rejected_by_llm']}, "
-                f"skipped (topic prefilter): {totals['topic_skipped']}, "
-                f"skipped (URL duplicate): {totals['skipped']}, "
-                f"skipped (semantic vs site): {totals['semantic_skipped']}, "
-                f"dropped (cross-source pool): {totals['pool_dropped']}, "
-                f"errors: {totals['errors']}."
-            )
-        )
+    def _published_today(self) -> int:
+        now = timezone.now().astimezone(_TEHRAN)
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return NewsArticle.objects.filter(
+            rewritten_at__gte=start,
+            status__in=(NewsArticle.Status.PENDING, NewsArticle.Status.PUBLISHED),
+        ).count()
 
-    def _wait_for_gemini_slot(self) -> None:
-        """Block until at least GEMINI_MIN_INTERVAL_SECONDS since the last request."""
-        if self._last_gemini_at is None:
+    def _queue_is_full(self) -> bool:
+        waiting = NewsArticle.objects.filter(status=NewsArticle.Status.QUEUED).count()
+        return waiting >= self.editorial.queue_limit
+
+    def _wait_slot(self) -> None:
+        if self._last_llm_at is None:
             return
+        remaining = self.editorial.llm_interval_seconds - (time.monotonic() - self._last_llm_at)
+        if remaining > 0:
+            time.sleep(remaining)
 
-        elapsed = time.monotonic() - self._last_gemini_at
-        remaining = GEMINI_MIN_INTERVAL_SECONDS - elapsed
-        if remaining <= 0:
-            return
-
-        minutes = remaining / 60.0
-        self.stdout.write(
-            self.style.HTTP_INFO(
-                f"  ⏳ waiting {remaining:.0f}s ({minutes:.1f} min) before next "
-                f"Gemini request "
-                f"({self._gemini_requests_done}/{MAX_REWRITES_PER_RUN} requests used)..."
-            )
-        )
-        time.sleep(remaining)
-
-    def _call_llm_json(
+    def _call_llm(
         self,
-        chat_client: ArvanChatClient,
-        model_name: str,
         prompt: str,
         required_keys: tuple[str, ...],
         *,
         stage: str,
-        temperature: float = 0.5,
-        max_tokens: int = 8000,
+        temperature: float,
+        max_tokens: int,
     ) -> dict[str, Any]:
-        """One spaced Arvan JSON call; increments the per-run request budget."""
-        self._wait_for_gemini_slot()
-        self._gemini_requests_done += 1
+        self._wait_slot()
+        self._last_llm_at = time.monotonic()
         self.stdout.write(self.style.HTTP_INFO(
-            f"  → Arvan LLM ({stage}) "
-            f"| model={model_name!r} "
-            f"| prompt={len(prompt)} chars "
-            f"| timeout={chat_client.config.timeout_seconds}s "
-            f"| request={self._gemini_requests_done}/{MAX_REWRITES_PER_RUN}"
+            f"  → LLM {stage} | {len(prompt)} chars | max_tokens={max_tokens}"
         ))
-        self._last_gemini_at = time.monotonic()
-
-        raw_text = chat_client.complete(
+        raw_text = self.chat_client.complete(
             prompt,
             temperature=temperature,
             max_tokens=max_tokens,
             json_mode=True,
         )
-        if not raw_text.strip():
-            raise ValueError(f"Empty response from Arvan AI ({stage}).")
-
         parsed = json.loads(_strip_markdown_fences(raw_text))
         if not isinstance(parsed, dict):
-            raise ValueError(f"Arvan AI ({stage}) did not return a JSON object.")
-
-        missing = [k for k in required_keys if k not in parsed]
+            raise ValueError(f"{stage} did not return a JSON object")
+        missing = [key for key in required_keys if key not in parsed]
         if missing:
-            raise ValueError(f"Missing keys in LLM {stage} response: {missing}")
+            raise ValueError(f"Missing keys in {stage}: {missing}")
         return parsed
 
-    def _scrape_log(self, message: str, error: bool = False) -> None:
-        timestamp = time.strftime("%H:%M:%S")
-        stream = self.stderr if error else self.stdout
-        style = self.style.ERROR if error else self.style.HTTP_INFO
-        stream.write(style(f"  [{timestamp}] [scrape] {message}") + "\n")
-        stream.flush()
-
-    def _process_candidate(
-        self,
-        candidate: PoolCandidate,
-        chat_client: ArvanChatClient,
-        model_name: str,
-        semantic_filter: SemanticDedupFilter,
-    ) -> dict[str, int]:
-        """Run site semantic-dedup + scrape + select then rewrite for one pooled candidate."""
-        return self._process_entry(
-            candidate.entry,
-            candidate.source,
-            chat_client,
-            model_name,
-            semantic_filter,
-            canonical_url=candidate.canonical_url,
-            title=candidate.title,
+    def _score(self, title: str, source_name: str, snippet: str) -> dict[str, Any]:
+        prompt = SCORE_PROMPT_TEMPLATE.format(
+            brand=BRAND_NAME,
+            categories=" | ".join(CATEGORIES),
+            axes=" | ".join(AXES),
+            regions=" | ".join(REGIONS),
+            threshold=self.editorial.score_threshold,
+            title=title,
+            source_name=source_name,
+            snippet=snippet[: self.editorial.snippet_chars],
+        )
+        self._scores_done += 1
+        return self._call_llm(
+            prompt,
+            SCORE_KEYS,
+            stage="score",
+            temperature=0.1,
+            max_tokens=self.editorial.score_max_tokens,
         )
 
-    def _process_entry(
+    def _rewrite(
         self,
-        entry: feedparser.FeedParserDict,
-        source: RssSource,
-        chat_client: ArvanChatClient,
-        model_name: str,
-        semantic_filter: SemanticDedupFilter,
         *,
-        canonical_url: str | None = None,
-        title: str | None = None,
-    ) -> dict[str, int]:
-        stats = {
-            "created": 0,
-            "rejected_by_llm": 0,
-            "topic_skipped": 0,
-            "skipped": 0,
-            "semantic_skipped": 0,
-            "errors": 0,
+        title: str,
+        source_name: str,
+        source_url: str,
+        content: str,
+        content_status: str,
+        category: str,
+        axes: str,
+        region: str,
+        corroboration: str,
+    ) -> dict[str, str]:
+        prompt = REWRITE_PROMPT_TEMPLATE.format(
+            brand=BRAND_NAME,
+            channel_id=self.channel_id,
+            corroboration=corroboration,
+            category=category,
+            axes=axes,
+            region=region,
+            content_status=content_status,
+            title=title,
+            source_name=source_name,
+            source_url=source_url,
+            content=content[: self.editorial.rewrite_chars],
+        )
+        self._rewrites_done += 1
+        parsed = self._call_llm(
+            prompt,
+            REWRITE_KEYS,
+            stage="rewrite",
+            temperature=0.4,
+            max_tokens=self.editorial.rewrite_max_tokens,
+        )
+        return self._finalize_copy(parsed, source_name=source_name, source_url=source_url)
+
+    def _repair(self, bad: dict[str, str], *, source_name: str, source_url: str) -> dict[str, str]:
+        prompt = REPAIR_PROMPT_TEMPLATE.format(
+            source_name=source_name,
+            channel_id=self.channel_id,
+            bad_json=json.dumps(bad, ensure_ascii=False)[:4000],
+        )
+        self._rewrites_done += 1
+        parsed = self._call_llm(
+            prompt,
+            REWRITE_KEYS,
+            stage="repair",
+            temperature=0.2,
+            max_tokens=self.editorial.rewrite_max_tokens,
+        )
+        return self._finalize_copy(parsed, source_name=source_name, source_url=source_url)
+
+    def _finalize_copy(
+        self,
+        parsed: dict[str, Any],
+        *,
+        source_name: str,
+        source_url: str,
+    ) -> dict[str, str]:
+        site_title = str(parsed.get("site_title") or "").strip()
+        site_lead = str(parsed.get("site_lead") or "").strip()
+        site_body = _sanitize_body(str(parsed.get("site_body") or ""))
+        telegram_text = str(parsed.get("telegram_text") or "").strip()
+        if "اهمیت برای ایران" not in site_body:
+            site_body += (
+                "<h2>اهمیت برای ایران</h2>"
+                "<p>اثر مستقیم این خبر بر صنعت ایران در متن منبع نیامده است "
+                "و باید با قیمت، تأمین و مقررات داخلی سنجیده شود.</p>"
+            )
+        if source_name and source_name not in site_body:
+            safe_url = source_url.replace('"', "%22")
+            site_body += f'<p>منبع: <a href="{safe_url}">{source_name}</a></p>'
+        if self.channel_id and self.channel_id not in telegram_text:
+            telegram_text = f"{telegram_text}\n\n{self.channel_id}".strip()
+        return {
+            "site_title": site_title,
+            "site_lead": site_lead,
+            "site_body": site_body,
+            "telegram_text": telegram_text,
         }
 
-        link = (getattr(entry, "link", "") or "").strip()
-        title = (title or getattr(entry, "title", "") or "").strip()
+    def _copy_is_clean(self, copy: dict[str, str]) -> list[str]:
+        return persian_problems(_joined_text(
+            copy.get("site_title"),
+            copy.get("site_lead"),
+            copy.get("site_body"),
+            copy.get("telegram_text"),
+        ))
 
-        if not link or not title:
-            self.stderr.write(self.style.WARNING("  Skipping entry without link/title."))
-            stats["errors"] += 1
-            return stats
+    def _scrape_log(self, message: str, error: bool = False) -> None:
+        stream = self.stderr if error else self.stdout
+        style = self.style.ERROR if error else self.style.HTTP_INFO
+        stream.write(style(f"  [scrape] {message}") + "\n")
 
-        if not canonical_url:
-            canonical_url = normalize_article_url(link)
-        if not canonical_url:
-            self.stderr.write(self.style.WARNING("  Skipping entry with empty URL."))
-            stats["errors"] += 1
-            return stats
-
-        if link != canonical_url:
-            self.stdout.write(
-                f"  → URL normalized: {link!r} → {canonical_url!r}"
-            )
-
-        # Hard guarantee: any URL already in the DB (pending/published/rejected)
-        # is never sent to the LLM again — including on later hourly cycles.
-        if self._article_exists(canonical_url):
-            self.stdout.write(
-                f"  - duplicate, skipped: {title[:80]} ({canonical_url})"
-            )
-            stats["skipped"] += 1
-            return stats
-
-        # Semantic dedup runs BEFORE scrape/LLM so we avoid expensive work
-        # on stories already covered by Khabar Varzeshi in the last 24 hours.
-        match = semantic_filter.check_entry(entry)
-        if match.skipped_due_to_error:
-            self.stderr.write(self.style.WARNING(
-                f"  ! semantic dedup unavailable for '{title[:60]}' "
-                f"— continuing ({match.detail})"
-            ))
-        elif match.is_duplicate:
-            self.stdout.write(self.style.WARNING(
-                f"  - semantic duplicate, skipped: {title[:80]} "
-                f"| score={match.similarity:.3f} "
-                f"| matched={match.matched_title[:80]!r}"
-            ))
-            if match.matched_url:
-                self.stdout.write(f"      baseline url: {match.matched_url}")
-            stats["semantic_skipped"] += 1
-            return stats
-        else:
-            self.stdout.write(self.style.HTTP_INFO(
-                f"  → semantic ok | score={match.similarity:.3f} "
-                f"| {match.detail}"
-            ))
-
-        rss_summary = ""
-        try:
-            rss_summary = _clean_html_to_text(
-                getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
-            )
-        except Exception:
-            rss_summary = ""
-
-        topic = assess_topic(title, rss_summary)
-        if topic.skip:
-            self.stdout.write(self.style.WARNING(
-                f"  - topic prefilter skip: {title[:80]} | {topic.reason}"
-            ))
-            # Persist as rejected so the URL is not reconsidered every cycle.
-            try:
-                NewsArticle.objects.create(
-                    source=source,
-                    original_title=title[:255],
-                    original_url=canonical_url,
-                    editorial_note=f"حذف پیش‌فیلتر موضوع: {topic.reason}",
-                    content_status="prefilter",
-                    status=NewsArticle.Status.REJECTED,
-                )
-            except IntegrityError:
-                pass
-            stats["topic_skipped"] += 1
-            return stats
-
-        raw_html, content_source, scrape_detail = scrape_article_html(
+    def _load_body(
+        self,
+        link: str,
+        canonical_url: str,
+        entry: feedparser.FeedParserDict,
+        fallback_text: str,
+    ) -> tuple[str, str]:
+        raw_html, content_source, detail = scrape_article_html(
             link, canonical_url, entry, scrape_log=self._scrape_log,
         )
-        clean_text = _clean_html_to_text(raw_html)
-        if not clean_text:
-            clean_text = title
-
+        clean_text = _clean_html_to_text(raw_html) or fallback_text
         if content_source == "webpage":
             content_status = "full"
         elif content_source == "rss":
             content_status = "rss"
         else:
             content_status = "blocked"
-
-        self.stdout.write(self.style.HTTP_INFO(
-            f"  → article content "
-            f"| source={content_source} "
-            f"| status={content_status} "
-            f"| html={len(raw_html)} chars "
-            f"| text={len(clean_text)} chars"
-            + (f" | {scrape_detail}" if scrape_detail and content_source == "webpage" else "")
-        ))
-        if content_source == "rss":
+        if detail and content_status != "full":
             self.stderr.write(self.style.WARNING(
-                f"  ! webpage scrape unavailable for '{title[:60]}' "
-                f"— using RSS fallback ({scrape_detail})."
+                f"  ! content {content_status}: {detail}"
             ))
+        return clean_text, content_status
 
-        image_candidates = _extract_image_candidates(entry, raw_html)
-        image_url = image_candidates[0][1] if image_candidates else None
-        present_fields = [
-            attr for attr in (
-                "media_thumbnail", "media_content", "enclosures",
-                "image", "itunes_image", "links",
-            )
-            if getattr(entry, attr, None)
-        ]
-        self.stdout.write(self.style.HTTP_INFO(
-            f"  → image scan for '{title[:60]}' "
-            f"| entry has: {present_fields or 'none'} "
-            f"| candidates: {len(image_candidates)} "
-            f"| picked: {image_candidates[0][0] if image_candidates else 'NONE'}"
-        ))
-        for src, url in image_candidates[:5]:
-            self.stdout.write(f"      • {src}: {url}")
-        if not image_candidates:
-            self.stderr.write(self.style.WARNING(
-                f"      ! no image found for '{title[:60]}' — Telegram will "
-                "be sent text-only."
-            ))
+    def _drain_queue(self) -> int:
+        """Rewrite items already scored and approved, without calling the scorer again."""
+        created = 0
+        room = self.editorial.max_rewrites_per_run - self._rewrites_done
+        daily_room = self.editorial.daily_cap - self._published_today()
+        limit = max(0, min(room, daily_room))
+        if limit <= 0:
+            return 0
 
-        content_for_llm = clean_text[:8000]
-        select_prompt = SELECT_PROMPT_TEMPLATE.format(
-            title=title,
-            source_name=source.name,
-            content_status=content_status,
-            content=content_for_llm,
+        queued = list(
+            NewsArticle.objects.filter(status=NewsArticle.Status.QUEUED)
+            .select_related("source")
+            .order_by("-suitability_score", "created_at")[:limit]
         )
-        last_prompt_chars = len(select_prompt)
+        for article in queued:
+            if self._rewrites_done >= self.editorial.max_rewrites_per_run:
+                break
+            if self._published_today() >= self.editorial.daily_cap:
+                break
+            try:
+                if self._rewrite_existing(article):
+                    created += 1
+            except Exception as exc:
+                self.stderr.write(self.style.WARNING(
+                    f"  ! queued rewrite failed #{article.id}: {exc!r}"
+                ))
+                self.stderr.write(self.style.WARNING(traceback.format_exc()))
+        return created
+
+    def _rewrite_existing(self, article: NewsArticle) -> bool:
+        entry = feedparser.FeedParserDict(
+            link=article.original_url,
+            title=article.original_title,
+            summary=article.source_excerpt or "",
+        )
+        clean_text, content_status = self._load_body(
+            article.original_url,
+            article.original_url,
+            entry,
+            article.source_excerpt or article.original_title,
+        )
+        corroboration = "فقط همین منبع؛ ادعا را چندمنبعه ننویس."
+        copy = self._rewrite(
+            title=article.original_title,
+            source_name=article.source.name,
+            source_url=article.original_url,
+            content=clean_text,
+            content_status=content_status,
+            category=article.industry_category,
+            axes=article.theme_axes,
+            region=article.region,
+            corroboration=corroboration,
+        )
+        problems = self._copy_is_clean(copy)
+        if problems:
+            self.stdout.write(self.style.WARNING(
+                f"  ! persian check: {'; '.join(problems)} — repairing"
+            ))
+            copy = self._repair(
+                copy,
+                source_name=article.source.name,
+                source_url=article.original_url,
+            )
+            problems = self._copy_is_clean(copy)
+        if problems or not copy["site_title"] or not copy["telegram_text"]:
+            article.status = NewsArticle.Status.REJECTED
+            article.editorial_note = "رد شد: فارسی خروجی قابل انتشار نبود"
+            article.save(update_fields=["status", "editorial_note"])
+            self.stdout.write(self.style.WARNING(
+                f"  - dropped unclean rewrite: {article.original_title[:70]}"
+            ))
+            return False
+
+        article.site_title = copy["site_title"][:255]
+        article.site_lead = copy["site_lead"]
+        article.site_body = copy["site_body"]
+        article.telegram_text = copy["telegram_text"]
+        article.content_status = content_status
+        article.image_url = None
+        article.status = NewsArticle.Status.PENDING
+        article.rewritten_at = timezone.now()
+        article.save()
+        self.stdout.write(self.style.SUCCESS(
+            f"  + rewritten from queue: {article.original_title[:70]}"
+        ))
+        return True
+
+    def _process_candidate(self, candidate: PoolCandidate) -> dict[str, int]:
+        stats = {
+            "created": 0,
+            "queued": 0,
+            "rejected": 0,
+            "topic_skipped": 0,
+            "skipped": 0,
+            "errors": 0,
+        }
+        link = (getattr(candidate.entry, "link", "") or "").strip()
+        title = (candidate.title or "").strip()
+        canonical_url = candidate.canonical_url or normalize_article_url(link)
+        if not link or not title or not canonical_url:
+            stats["errors"] += 1
+            return stats
+        if NewsArticle.objects.filter(original_url=canonical_url).exists():
+            stats["skipped"] += 1
+            return stats
+
+        snippet = (candidate.description or "").strip()
+        topic = assess_topic(title, snippet)
+        if topic.skip:
+            self._save_rejected(
+                candidate,
+                canonical_url,
+                note=f"حذف پیش‌فیلتر: {topic.reason}",
+                content_status="prefilter",
+            )
+            stats["topic_skipped"] += 1
+            return stats
 
         try:
-            # --- Stage 1: editorial select/reject only -----------------------
-            select_parsed = self._call_llm_json(
-                chat_client,
-                model_name,
-                select_prompt,
-                SELECT_KEYS,
-                stage="select",
-                temperature=0.3,
-                max_tokens=800,
-            )
-
-            decision = str(select_parsed.get("decision") or "").strip().lower()
-            if decision not in VALID_DECISIONS:
-                raise ValueError(f"Invalid decision from LLM: {decision!r}")
-
-            selection_reason = (select_parsed.get("selection_reason") or "").strip()
-            site_title = None
-            site_lead = None
-            site_body = None
-            telegram_text = None
-
-            if decision in SELECT_DECISIONS:
-                if decision == "needs_review" and selection_reason:
-                    editorial_note = f"نیازمند بررسی: {selection_reason}"
-                elif selection_reason:
-                    editorial_note = f"چرا مهم: {selection_reason}"
-                else:
-                    editorial_note = None
-                article_status = NewsArticle.Status.PENDING
-
-                # --- Stage 2: rewrite only (no filter criteria in prompt) ---
-                rewrite_prompt = REWRITE_PROMPT_TEMPLATE.format(
-                    channel_id=TELEGRAM_CHANNEL_ID,
-                    title=title,
-                    source_name=source.name,
-                    content_status=content_status,
-                    content=content_for_llm,
-                )
-                last_prompt_chars = len(rewrite_prompt)
-                rewrite_parsed = self._call_llm_json(
-                    chat_client,
-                    model_name,
-                    rewrite_prompt,
-                    REWRITE_KEYS,
-                    stage="rewrite",
-                    temperature=0.5,
-                    max_tokens=8000,
-                )
-
-                site_title = (rewrite_parsed.get("site_title") or "").strip()
-                site_lead = (rewrite_parsed.get("site_lead") or "").strip()
-                site_body = (rewrite_parsed.get("site_body") or "").strip()
-                telegram_text = (rewrite_parsed.get("telegram_text") or "").strip()
-
-                if not site_title or not telegram_text:
-                    raise ValueError(
-                        f"rewrite for decision={decision} requires "
-                        "site_title and telegram_text"
-                    )
-                if TELEGRAM_CHANNEL_ID not in telegram_text:
-                    telegram_text = f"{telegram_text}\n\n{TELEGRAM_CHANNEL_ID}".strip()
+            scored = self._score(title, candidate.source_name, snippet or title)
+        except ArvanAIRequestError as exc:
+            if exc.status_code in {401, 403}:
+                self._auth_failed = True
+                self.stderr.write(self.style.ERROR(
+                    "AvalAI rejected the key (HTTP "
+                    f"{exc.status_code}). Set AVALAI_API_KEY in .env, "
+                    "then run fetch_news again."
+                ))
             else:
-                editorial_note = (
-                    f"حذف عامل: {selection_reason}" if selection_reason
-                    else "حذف عامل: کم‌جذاب یا کم‌کلیک برای مخاطب ایرانی"
-                )
-                article_status = NewsArticle.Status.REJECTED
+                self.stderr.write(self.style.WARNING(
+                    f"  ! score failed for '{title[:60]}': {exc}"
+                ))
+            stats["errors"] += 1
+            return stats
+        except (json.JSONDecodeError, ValueError, TimeoutError) as exc:
+            self.stderr.write(self.style.WARNING(
+                f"  ! score failed for '{title[:60]}': {exc}"
+            ))
+            stats["errors"] += 1
+            return stats
 
-            # Re-check after the (slow) LLM call — another worker may have
-            # inserted the same URL while we were waiting.
-            if self._article_exists(canonical_url):
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"  - duplicate after LLM, skipped: {title[:80]} "
-                        f"({canonical_url})"
-                    )
-                )
+        score = _as_score(scored.get("score"))
+        approved = _as_bool(scored.get("approve")) and score >= self.editorial.score_threshold
+        category = canonicalize(str(scored.get("category") or ""), CATEGORIES)
+        axes = canonicalize_axes(scored.get("axes"))
+        region = canonicalize(str(scored.get("region") or ""), REGIONS)
+        reason = str(scored.get("reason") or "").strip()
+        if approved and (not category or not region or not axes):
+            approved = False
+            reason = reason or "برچسب دسته، محور یا منطقه معتبر نبود"
 
-                stats["skipped"] += 1
+        if not approved:
+            self._save_rejected(
+                candidate,
+                canonical_url,
+                note=f"نمره {score}: {reason or 'برای نماد صنعت مناسب نبود'}",
+                content_status="scored",
+                score=score,
+                category=category,
+                axes="، ".join(axes),
+                region=region,
+                excerpt=snippet,
+            )
+            self.stdout.write(self.style.WARNING(
+                f"  - score {score} reject: {title[:70]}"
+            ))
+            stats["rejected"] += 1
+            return stats
+
+        self.stdout.write(self.style.HTTP_INFO(
+            f"  → score {score} approve | {category} | {region}"
+        ))
+        can_rewrite = (
+            self._rewrites_done < self.editorial.max_rewrites_per_run
+            and self._published_today() < self.editorial.daily_cap
+        )
+        if not can_rewrite:
+            self._save_queued(
+                candidate,
+                canonical_url,
+                note=f"نمره {score}: {reason}",
+                score=score,
+                category=category,
+                axes="، ".join(axes),
+                region=region,
+                excerpt=snippet,
+            )
+            stats["queued"] += 1
+            return stats
+
+        try:
+            clean_text, content_status = self._load_body(
+                link, canonical_url, candidate.entry, snippet or title,
+            )
+            others = "، ".join(candidate.corroborating_sources)
+            corroboration = (
+                f"همچنین در {others} دیده شده؛ باز هم هر عدد را به منبع خودش نسبت بده."
+                if others
+                else "فقط همین منبع؛ ادعا را چندمنبعه ننویس."
+            )
+            copy = self._rewrite(
+                title=title,
+                source_name=candidate.source_name,
+                source_url=canonical_url,
+                content=clean_text,
+                content_status=content_status,
+                category=category,
+                axes="، ".join(axes),
+                region=region,
+                corroboration=corroboration,
+            )
+            problems = self._copy_is_clean(copy)
+            if problems:
+                self.stdout.write(self.style.WARNING(
+                    f"  ! persian check: {'; '.join(problems)} — repairing"
+                ))
+                copy = self._repair(
+                    copy,
+                    source_name=candidate.source_name,
+                    source_url=canonical_url,
+                )
+                problems = self._copy_is_clean(copy)
+            if problems or not copy["site_title"] or not copy["telegram_text"]:
+                self._save_rejected(
+                    candidate,
+                    canonical_url,
+                    note="رد شد: فارسی خروجی قابل انتشار نبود",
+                    content_status=content_status,
+                    score=score,
+                    category=category,
+                    axes="، ".join(axes),
+                    region=region,
+                    excerpt=snippet,
+                )
+                stats["rejected"] += 1
                 return stats
 
-            try:
-                NewsArticle.objects.create(
-                    source=source,
-                    original_title=title[:255],
-                    original_url=canonical_url,
-                    image_url=(image_url or None) if decision in SELECT_DECISIONS else None,
-                    site_title=(site_title[:255] if site_title else None),
-                    site_lead=site_lead or None,
-                    site_body=site_body or None,
-                    telegram_text=telegram_text or None,
-                    editorial_note=editorial_note,
-                    content_status=content_status,
-                    status=article_status,
-                )
-            except IntegrityError:
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"  - duplicate on save (DB constraint), skipped: "
-                        f"{title[:80]} ({canonical_url})"
-                    )
-                )
+            if NewsArticle.objects.filter(original_url=canonical_url).exists():
                 stats["skipped"] += 1
                 return stats
-
-            if decision in SELECT_DECISIONS:
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"  + created ({decision}): {title[:80]} "
-                        f"(LLM {self._gemini_requests_done}/{MAX_REWRITES_PER_RUN})"
-                    )
-                )
-                if selection_reason:
-                    self.stdout.write(f"      reason: {selection_reason[:160]}")
-                stats["created"] += 1
-            else:
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"  - editorial reject: {title[:80]} "
-                        f"| {selection_reason[:120]}"
-                    )
-                )
-                stats["rejected_by_llm"] += 1
-
-        except TIMEOUT_EXCEPTIONS as exc:
-            self.stderr.write(self.style.ERROR(
-                f"  ! Arvan LLM failure for '{title[:60]}': "
-                f"type={type(exc).__name__} | message={exc!s}"
-            ))
-            self.stderr.write(self.style.ERROR(
-                f"    model={model_name!r}, "
-                f"timeout={chat_client.config.timeout_seconds}s, "
-                f"prompt size={last_prompt_chars} chars"
-            ))
-            self.stderr.write(self.style.ERROR(traceback.format_exc()))
-            stats["errors"] += 1
-        except json.JSONDecodeError as exc:
-            self.stderr.write(
-                self.style.WARNING(
-                    f"  ! Invalid JSON from Arvan AI for '{title[:60]}': {exc}. Skipping."
-                )
+            NewsArticle.objects.create(
+                source=candidate.source,
+                original_title=title[:255],
+                original_url=canonical_url,
+                image_url=None,
+                site_title=copy["site_title"][:255],
+                site_lead=copy["site_lead"],
+                site_body=copy["site_body"],
+                telegram_text=copy["telegram_text"],
+                editorial_note=f"نمره {score}: {reason}"[:1000],
+                content_status=content_status,
+                industry_category=category,
+                theme_axes="، ".join(axes),
+                region=region,
+                suitability_score=score,
+                source_excerpt=snippet[:4000],
+                rewritten_at=timezone.now(),
+                status=NewsArticle.Status.PENDING,
             )
-            stats["errors"] += 1
+        except IntegrityError:
+            stats["skipped"] += 1
+            return stats
         except Exception as exc:
-            self.stderr.write(
-                self.style.WARNING(
-                    f"  ! LLM/processing failure for '{title[:60]}': {exc!r}. Skipping."
-                )
-            )
+            self.stderr.write(self.style.WARNING(
+                f"  ! rewrite failed for '{title[:60]}': {exc!r}"
+            ))
             self.stderr.write(self.style.WARNING(traceback.format_exc()))
-            stats["errors"] += 1
+            # Keep the passing score so the next cycle rewrites without a new score call.
+            self._save_queued(
+                candidate,
+                canonical_url,
+                note=f"نمره {score}: بازنویسی ناتمام — {reason}",
+                score=score,
+                category=category,
+                axes="، ".join(axes),
+                region=region,
+                excerpt=snippet,
+            )
+            stats["queued"] += 1
+            return stats
 
+        self.stdout.write(self.style.SUCCESS(f"  + created: {title[:70]}"))
+        stats["created"] += 1
         return stats
 
-    @staticmethod
-    def _article_exists(canonical_url: str) -> bool:
-        """Return True if an article with this canonical URL is already stored."""
-        return NewsArticle.objects.filter(original_url=canonical_url).exists()
+    def _save_rejected(
+        self,
+        candidate: PoolCandidate,
+        canonical_url: str,
+        *,
+        note: str,
+        content_status: str,
+        score: int | None = None,
+        category: str = "",
+        axes: str = "",
+        region: str = "",
+        excerpt: str = "",
+    ) -> None:
+        try:
+            NewsArticle.objects.create(
+                source=candidate.source,
+                original_title=candidate.title[:255],
+                original_url=canonical_url,
+                editorial_note=note[:1000],
+                content_status=content_status,
+                industry_category=category,
+                theme_axes=axes,
+                region=region,
+                suitability_score=score,
+                source_excerpt=excerpt[:4000],
+                status=NewsArticle.Status.REJECTED,
+            )
+        except IntegrityError:
+            return
+
+    def _save_queued(
+        self,
+        candidate: PoolCandidate,
+        canonical_url: str,
+        *,
+        note: str,
+        score: int,
+        category: str,
+        axes: str,
+        region: str,
+        excerpt: str,
+    ) -> None:
+        try:
+            NewsArticle.objects.create(
+                source=candidate.source,
+                original_title=candidate.title[:255],
+                original_url=canonical_url,
+                editorial_note=note[:1000],
+                content_status="scored",
+                industry_category=category,
+                theme_axes=axes,
+                region=region,
+                suitability_score=score,
+                source_excerpt=(excerpt or candidate.title)[:4000],
+                status=NewsArticle.Status.QUEUED,
+            )
+        except IntegrityError:
+            return
+        self.stdout.write(self.style.HTTP_INFO(
+            f"  ~ queued for rewrite: {candidate.title[:70]}"
+        ))

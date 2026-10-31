@@ -1,0 +1,55 @@
+"""Reject rewritten copy that leaks non-Persian scripts."""
+
+from __future__ import annotations
+
+import re
+
+# Chinese, Japanese, Korean, Cyrillic, Greek, Hebrew, Thai, Devanagari.
+_FOREIGN_SCRIPT_RE = re.compile(
+    "["
+    "\u3040-\u30ff"
+    "\u3400-\u9fff"
+    "\uac00-\ud7af"
+    "\u0400-\u04ff"
+    "\u0370-\u03ff"
+    "\u0590-\u05ff"
+    "\u0e00-\u0e7f"
+    "\u0900-\u097f"
+    "\uff00-\uffef"
+    "]"
+)
+
+_ACRONYM_RE = re.compile(
+    r"\b(?:LNG|CBAM|ESG|PMI|OPEC|HSE|OEM|GDP|WTO|IEA|EIA|UN|EU|UK|US|AI|IoT|CO2|MW|GW|kWh|EV)\b",
+    re.IGNORECASE,
+)
+
+_LATIN_LETTER_RE = re.compile(r"[A-Za-z]")
+_ANY_LETTER_RE = re.compile(r"[^\W\d_]", re.UNICODE)
+
+
+def foreign_script_chars(text: str) -> list[str]:
+    return _FOREIGN_SCRIPT_RE.findall(text or "")
+
+
+def latin_letter_ratio(text: str) -> float:
+    """Share of letters that are Latin, after dropping allowed acronyms."""
+    cleaned = _ACRONYM_RE.sub(" ", text or "")
+    letters = _ANY_LETTER_RE.findall(cleaned)
+    if not letters:
+        return 0.0
+    latin = sum(1 for char in letters if _LATIN_LETTER_RE.fullmatch(char))
+    return latin / len(letters)
+
+
+def persian_problems(text: str, *, max_latin_ratio: float = 0.22) -> list[str]:
+    """Return human-readable problems. Empty list means the text is acceptable."""
+    problems: list[str] = []
+    foreign = foreign_script_chars(text)
+    if foreign:
+        sample = "".join(dict.fromkeys(foreign))[:12]
+        problems.append(f"نویسه بیگانه: {sample}")
+    ratio = latin_letter_ratio(text)
+    if ratio > max_latin_ratio:
+        problems.append(f"متن بیش از حد لاتین است ({ratio:.0%})")
+    return problems

@@ -16,9 +16,10 @@ class RssSourceAdmin(admin.ModelAdmin):
 @admin.register(NewsArticle)
 class NewsArticleAdmin(admin.ModelAdmin):
     list_display = (
-        "original_title", "source", "status", "has_image", "created_at",
+        "original_title", "source", "status", "industry_category",
+        "region", "suitability_score", "created_at",
     )
-    list_filter = ("status", "source")
+    list_filter = ("status", "source", "industry_category", "region")
     search_fields = ("original_title", "site_title")
     date_hierarchy = "created_at"
     list_select_related = ("source",)
@@ -31,9 +32,10 @@ class NewsArticleAdmin(admin.ModelAdmin):
                 "original_title", "original_url",
                 "image_url", "image_preview",
                 "content_status", "editorial_note",
+                "industry_category", "theme_axes", "region", "suitability_score",
             ),
         }),
-        ("بازنویسی شده با Gemini", {
+        ("بازنویسی نماد صنعت", {
             "fields": ("site_title", "site_lead", "site_body", "telegram_text"),
         }),
     )

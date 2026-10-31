@@ -1,4 +1,4 @@
-"""HTTP helpers shared by Arvan Cloud AI clients."""
+"""HTTP helpers for AvalAI OpenAI-compatible chat completions."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 def auth_headers(api_key: str) -> dict[str, str]:
-    """Arvan docs: ``Authorization: apikey <key>`` (literal word apikey + space)."""
+    """AvalAI uses ``Authorization: Bearer <key>``."""
     key = api_key.strip()
-    if key.lower().startswith("apikey "):
+    if key.lower().startswith("bearer "):
         value = key
     else:
-        value = f"apikey {key}"
+        value = f"Bearer {key}"
     return {
         "Authorization": value,
         "Content-Type": "application/json",
@@ -64,7 +64,7 @@ class ArvanAIRequestError(RuntimeError):
         self.status_code = status_code
         self.body = body
         self.url = url
-        super().__init__(f"Arvan AI HTTP {status_code} for {url}: {body[:500]}")
+        super().__init__(f"AvalAI HTTP {status_code}: {body[:300]}")
 
     @property
     def is_rate_limited(self) -> bool:

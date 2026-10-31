@@ -1,4 +1,4 @@
-"""Arvan Cloud AI package — OpenAI-compatible gateway to Gemini models."""
+"""LLM chat package — AvalAI OpenAI-compatible gateway."""
 
 from core.arvan_ai.chat import ArvanChatClient
 from core.arvan_ai.config import ArvanAIConfig, load_arvan_ai_config

@@ -324,6 +324,19 @@ def format_article_message(
     note_block = (
         f"📌 <b>یادداشت تحریریه:</b> {html.escape(note)}\n\n" if note else ""
     )
+    tag_bits = [
+        bit for bit in (
+            (article.industry_category or "").strip(),
+            (article.theme_axes or "").strip(),
+            (article.region or "").strip(),
+        )
+        if bit
+    ]
+    if article.suitability_score is not None:
+        tag_bits.append(f"نمره {article.suitability_score}")
+    tag_block = (
+        f"🏷 <b>برچسب:</b> {html.escape(' | '.join(tag_bits))}\n\n" if tag_bits else ""
+    )
     content_status = (article.content_status or "").strip()
     status_block = ""
     if content_status and content_status != "full":
@@ -336,6 +349,7 @@ def format_article_message(
 
     header = (
         f"📰 <b>تیتر:</b> {title}\n\n"
+        f"{tag_block}"
         f"{note_block}"
         f"{status_block}"
         f"📝 <b>لید:</b> {lead}\n\n"
@@ -353,6 +367,7 @@ def format_article_message(
     # Preserve title/lead/telegram/source; shrink the site-body block to fit.
     prefix = (
         f"📰 <b>تیتر:</b> {title}\n\n"
+        f"{tag_block}"
         f"{note_block}"
         f"{status_block}"
         f"📝 <b>لید:</b> {lead}\n\n"

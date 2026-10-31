@@ -7,6 +7,10 @@ from core.article_scraper import (
     primary_article_url,
 )
 from core.bot.services import _site_body_as_plain_text
+from core.editorial.persian import persian_problems
+from core.editorial.sources import NEMAD_SOURCES
+from core.editorial.taxonomy import canonicalize, canonicalize_axes, CATEGORIES
+from core.news_pool.lexical import jaccard, title_tokens
 from core.topic_filter import assess_topic
 from core.url_utils import normalize_article_url
 
@@ -53,25 +57,63 @@ class PageSourceValidationTests(SimpleTestCase):
 
 
 class TopicFilterTests(SimpleTestCase):
-    def test_skips_routine_nfl_without_exception(self):
+    def test_skips_routine_sports(self):
         result = assess_topic("NFL injury report: three starters ruled out")
         self.assertTrue(result.skip)
 
-    def test_keeps_arsenal_owner_baseball_story(self):
+    def test_keeps_industrial_item_that_mentions_a_league_word(self):
         result = assess_topic(
-            "Arsenal owner buys Major League Baseball franchise"
+            "Steel plant signs power contract ahead of the World Cup construction rush"
         )
         self.assertFalse(result.skip)
 
-    def test_skips_non_sport_celebrity(self):
-        result = assess_topic("Nicole Kidman reveals new look at movie premiere")
+    def test_skips_celebrity(self):
+        result = assess_topic("Celebrity stuns on the red carpet before the premiere")
         self.assertTrue(result.skip)
 
-    def test_keeps_premier_league_transfer(self):
-        result = assess_topic(
-            "Manchester City close to signing Enzo Fernandez from Chelsea"
-        )
+    def test_keeps_plain_industry_headline(self):
+        result = assess_topic("Copper mine cuts output after smelter outage")
         self.assertFalse(result.skip)
+
+
+class PersianGuardTests(SimpleTestCase):
+    def test_rejects_cjk(self):
+        problems = persian_problems("قیمت فولاد در 上海 بالا رفت")
+        self.assertTrue(problems)
+
+    def test_accepts_persian_with_acronym(self):
+        problems = persian_problems(
+            "صادرات LNG ایران در گزارش اوپک ثابت ماند و اثری بر تولید پتروشیمی دارد."
+        )
+        self.assertEqual(problems, [])
+
+
+class TaxonomyTests(SimpleTestCase):
+    def test_canonical_category(self):
+        self.assertEqual(
+            canonicalize("فولاد", CATEGORIES),
+            "فولاد، فلزات و معدن",
+        )
+
+    def test_axes_list(self):
+        self.assertEqual(
+            canonicalize_axes(["پایداری", "تعرفه"]),
+            ["پایداری و کربن‌زدایی", "تجارت، تعرفه و مقررات"],
+        )
+
+
+class LexicalDedupeTests(SimpleTestCase):
+    def test_similar_titles_cluster(self):
+        left = title_tokens("Copper mine cuts output after smelter outage")
+        right = title_tokens("Copper mine cuts output after a smelter outage")
+        self.assertGreaterEqual(jaccard(left, right), 0.5)
+
+
+class SourceListTests(SimpleTestCase):
+    def test_twenty_five_unique_feeds(self):
+        urls = [item.url for item in NEMAD_SOURCES]
+        self.assertEqual(len(urls), 25)
+        self.assertEqual(len(set(urls)), 25)
 
 
 class SiteBodyPreviewTests(SimpleTestCase):

@@ -19,6 +19,12 @@ from core.url_utils import normalize_article_url
 
 logger = logging.getLogger(__name__)
 
+# Several publisher feeds return 403 to feedparser's default client.
+_FEED_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+)
+
 LogFn = Callable[[str], None]
 
 
@@ -105,7 +111,7 @@ def collect_recent_pool(
     for source in source_list:
         priority = int(getattr(source, "priority", 100) or 100)
         try:
-            feed = feedparser.parse(source.url)
+            feed = feedparser.parse(source.url, agent=_FEED_AGENT)
         except Exception as exc:
             result.stats.feeds_failed += 1
             _log(f"feed error | {source.name}: {exc!r}")

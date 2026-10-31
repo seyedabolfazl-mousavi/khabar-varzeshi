@@ -1,4 +1,4 @@
-"""Arvan Cloud AI chat completions client (OpenAI-compatible)."""
+"""AvalAI chat completions client (OpenAI-compatible)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class ArvanChatClient:
-    """Thin client for ``POST .../v1/chat/completions`` via Arvan gateway."""
+    """Thin client for ``POST .../v1/chat/completions`` via AvalAI."""
 
     def __init__(self, config: ArvanAIConfig | None = None) -> None:
         self.config = config or load_arvan_ai_config()

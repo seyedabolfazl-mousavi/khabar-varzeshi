@@ -1,4 +1,4 @@
-"""Arvan Cloud AI gateway (OpenAI-compatible) configuration — chat rewrite only."""
+"""AvalAI chat configuration (OpenAI-compatible /v1/chat/completions)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ from django.conf import settings
 from dotenv import load_dotenv
 
 
-DEFAULT_MODEL = "Gemini-3.1-Flash-Lite-Preview"
+DEFAULT_MODEL = "claude-haiku-5-5"
+DEFAULT_BASE_URL = "https://api.avalai.ir/v1"
 DEFAULT_TIMEOUT_SECONDS = 120
 
 
@@ -24,21 +25,18 @@ class ArvanAIConfig:
 def load_arvan_ai_config() -> ArvanAIConfig:
     load_dotenv(settings.BASE_DIR / ".env")
 
-    api_key = os.getenv("ARVAN_AI_API_KEY", "").strip()
-    chat_url = os.getenv("ARVAN_AI_CHAT_URL", "").strip()
-    model = os.getenv("ARVAN_AI_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    api_key = os.getenv("AVALAI_API_KEY", "").strip()
+    base_url = os.getenv("AVALAI_BASE_URL", DEFAULT_BASE_URL).strip() or DEFAULT_BASE_URL
+    chat_url = base_url.rstrip("/") + "/chat/completions"
+    model = os.getenv("AVALAI_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
 
     if not api_key or api_key.startswith("your_"):
         raise ValueError(
-            "ARVAN_AI_API_KEY is not set. Add your Arvan Cloud AI apikey to .env."
-        )
-    if not chat_url or "your_" in chat_url:
-        raise ValueError(
-            "ARVAN_AI_CHAT_URL is not set. Add the full "
-            ".../v1/chat/completions gateway URL to .env."
+            "AVALAI_API_KEY is not set. Add your AvalAI key to .env "
+            "(Authorization: Bearer <key>)."
         )
 
-    timeout = int(os.getenv("ARVAN_AI_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS)))
+    timeout = int(os.getenv("AVALAI_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS)))
 
     return ArvanAIConfig(
         api_key=api_key,

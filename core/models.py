@@ -28,6 +28,8 @@ class NewsArticle(models.Model):
         PENDING = "pending", "Pending"
         PUBLISHED = "published", "Published"
         REJECTED = "rejected", "Rejected"
+        # Scored and approved, waiting for the rewrite budget.
+        QUEUED = "queued", "Queued"
 
     source = models.ForeignKey(
         RssSource,
@@ -45,6 +47,14 @@ class NewsArticle(models.Model):
     editorial_note = models.TextField(null=True, blank=True)
     # full = webpage scrape; rss = RSS-only fallback; blocked = scrape failed.
     content_status = models.CharField(max_length=20, null=True, blank=True)
+    # نماد صنعت three-tag pattern: one industry, one or more axes, one region.
+    industry_category = models.CharField(max_length=80, blank=True, default="")
+    theme_axes = models.CharField(max_length=240, blank=True, default="")
+    region = models.CharField(max_length=40, blank=True, default="")
+    suitability_score = models.PositiveSmallIntegerField(null=True, blank=True)
+    rewritten_at = models.DateTimeField(null=True, blank=True)
+    # RSS title/summary kept so a queued item can be rewritten without re-scoring.
+    source_excerpt = models.TextField(blank=True, default="")
     status = models.CharField(
         max_length=20,
         choices=Status.choices,

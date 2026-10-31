@@ -60,9 +60,8 @@ class Command(BaseCommand):
         f"{CHECK_INTERVAL_HOURS} hour(s) the worker calls `fetch_news` "
         "and, if new pending articles were added, notifies the admin "
         "Telegram chat. "
-        "Each fetch_news cycle rewrites at most 10 new articles with "
-        "≥5 minutes between Gemini requests; already-stored URLs are never "
-        "rewritten again."
+        "Each fetch_news cycle scores new items cheaply and rewrites only "
+        "those approved for نماد صنعت, up to the daily cap."
     )
 
     def handle(self, *args: Any, **options: Any) -> None:
@@ -100,9 +99,9 @@ class Command(BaseCommand):
 
                 if new_count > 0:
                     text = (
-                        f"🔔 <b>{new_count} پیشنهاد خبری آماده بررسی است</b>\n\n"
-                        f"موارد کم‌جذاب یا کم‌کلیک توسط عامل حذف شده‌اند؛ "
-                        f"فقط پیشنهادهای جذاب برای مخاطب ایرانی در صف بازبینی هستند.\n\n"
+                        f"🔔 <b>{new_count} خبر صنعتی آماده بررسی است</b>\n\n"
+                        f"فقط مواردی که برای نماد صنعت نمره قبولی گرفته‌اند "
+                        f"بازنویسی شده‌اند.\n\n"
                         f"برای بررسی، دکمه <b>{CHECK_PENDING_BUTTON}</b> را بزنید "
                         "یا /check_pending را ارسال کنید."
                     )
@@ -151,7 +150,7 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 f"Worker started. Running `fetch_news` every "
                 f"{CHECK_INTERVAL_HOURS} hour(s) "
-                f"(max 10 Gemini rewrites/cycle, ≥5 min between requests). "
+                "(suitability score, then rewrite only if approved). "
                 f"Admin IDs: {', '.join(str(i) for i in sorted(config.allowed_admin_ids))}. "
                 "First cycle starts now. Press Ctrl+C to stop."
             )
