@@ -109,12 +109,15 @@ class EditorialGuardTests(SimpleTestCase):
         self.assertEqual(editorial_problems(body), [])
 
     def test_rewrite_prompt_uses_general_patterns(self):
-        self.assertIn("الگوی بومی‌سازی", REWRITE_PROMPT_TEMPLATE)
+        self.assertIn("تحلیل قیاسی برای ایران", REWRITE_PROMPT_TEMPLATE)
+        self.assertIn("تایپوگرافی اعداد فارسی", REWRITE_PROMPT_TEMPLATE)
+        self.assertIn("هرم وارونه", REWRITE_PROMPT_TEMPLATE)
         self.assertIn("مثال‌های داخل این دستور فقط برای فهم الگو هستند", REWRITE_PROMPT_TEMPLATE)
         self.assertIn("صفت هویت‌ساز", REWRITE_PROMPT_TEMPLATE)
         self.assertIn("الگوی کلی را برای همین خبر اعمال کن", REPAIR_PROMPT_TEMPLATE)
         self.assertNotIn("اکس‌پنگ", REWRITE_PROMPT_TEMPLATE)
         self.assertNotIn("پارس جنوبی", REWRITE_PROMPT_TEMPLATE)
+        self.assertNotIn("پلی‌دای‌سیکلوپنتادی‌ان", REWRITE_PROMPT_TEMPLATE)
 
 
 class TaxonomyTests(SimpleTestCase):
