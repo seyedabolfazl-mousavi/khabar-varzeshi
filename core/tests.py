@@ -7,7 +7,8 @@ from core.article_scraper import (
     primary_article_url,
 )
 from core.bot.services import _site_body_as_plain_text
-from core.editorial.persian import persian_problems
+from core.editorial.persian import editorial_problems, persian_problems
+from core.editorial.prompts import REPAIR_PROMPT_TEMPLATE, REWRITE_PROMPT_TEMPLATE
 from core.editorial.sources import NEMAD_SOURCES
 from core.editorial.taxonomy import canonicalize, canonicalize_axes, CATEGORIES
 from core.news_pool.lexical import jaccard, title_tokens
@@ -86,6 +87,34 @@ class PersianGuardTests(SimpleTestCase):
             "صادرات LNG ایران در گزارش اوپک ثابت ماند و اثری بر تولید پتروشیمی دارد."
         )
         self.assertEqual(problems, [])
+
+
+class EditorialGuardTests(SimpleTestCase):
+    def test_rejects_passive_iran_framing(self):
+        body = (
+            "<h2>اصل خبر</h2><p>متن خبر</p>"
+            "<h2>اهمیت برای ایران</h2>"
+            "<p>اثر مستقیم این خبر بر صنعت ایران دیده نمی‌شود.</p>"
+        )
+        problems = editorial_problems(body)
+        self.assertIn("جمله منفعل درباره ایران ممنوع است", problems)
+
+    def test_accepts_comparative_iran_section(self):
+        body = (
+            "<h2>اصل خبر</h2><p>متن خبر</p>"
+            "<h2>اهمیت برای ایران</h2>"
+            "<p>با توجه به میادین نفتی پایان‌عمر در ایران، این فناوری می‌تواند "
+            "راهکاری برای تولید انرژی پاک در داخل باشد.</p>"
+        )
+        self.assertEqual(editorial_problems(body), [])
+
+    def test_rewrite_prompt_uses_general_patterns(self):
+        self.assertIn("الگوی بومی‌سازی", REWRITE_PROMPT_TEMPLATE)
+        self.assertIn("مثال‌های داخل این دستور فقط برای فهم الگو هستند", REWRITE_PROMPT_TEMPLATE)
+        self.assertIn("صفت هویت‌ساز", REWRITE_PROMPT_TEMPLATE)
+        self.assertIn("الگوی کلی را برای همین خبر اعمال کن", REPAIR_PROMPT_TEMPLATE)
+        self.assertNotIn("اکس‌پنگ", REWRITE_PROMPT_TEMPLATE)
+        self.assertNotIn("پارس جنوبی", REWRITE_PROMPT_TEMPLATE)
 
 
 class TaxonomyTests(SimpleTestCase):

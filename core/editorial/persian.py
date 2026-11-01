@@ -1,4 +1,4 @@
-"""Reject rewritten copy that leaks non-Persian scripts."""
+"""Reject rewritten copy that leaks non-Persian scripts or breaks editorial rules."""
 
 from __future__ import annotations
 
@@ -27,6 +27,22 @@ _ACRONYM_RE = re.compile(
 _LATIN_LETTER_RE = re.compile(r"[A-Za-z]")
 _ANY_LETTER_RE = re.compile(r"[^\W\d_]", re.UNICODE)
 
+# Passive Iran framing banned by the editorial desk.
+_PASSIVE_IRAN_RE = re.compile(
+    r"("
+    r"اثر\s*مستقیم(?:ی)?[^۔.!?\n]{0,80}?"
+    r"(?:دیده\s*نمی‌شود|وجود\s*ندارد|نیامده\s*است)"
+    r"|ربطی\s*به\s*ایران\s*ندارد"
+    r"|بر\s*ایران\s*اثر\s*ندارد"
+    r"|ارتباطی\s*با\s*ایران\s*ندارد"
+    r")"
+)
+
+_IRAN_SECTION_RE = re.compile(
+    r"اهمیت\s*برای\s*ایران\s*</h2>\s*<p>(.*?)</p>",
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 def foreign_script_chars(text: str) -> list[str]:
     return _FOREIGN_SCRIPT_RE.findall(text or "")
@@ -52,4 +68,20 @@ def persian_problems(text: str, *, max_latin_ratio: float = 0.22) -> list[str]:
     ratio = latin_letter_ratio(text)
     if ratio > max_latin_ratio:
         problems.append(f"متن بیش از حد لاتین است ({ratio:.0%})")
+    return problems
+
+
+def editorial_problems(site_body: str, *, joined_text: str = "") -> list[str]:
+    """Catch passive Iran framing and a missing Iran section."""
+    problems: list[str] = []
+    body = site_body or ""
+    haystack = "\n".join(part for part in (body, joined_text) if part)
+    if "اهمیت برای ایران" not in body:
+        problems.append("بخش اهمیت برای ایران نیست")
+    else:
+        match = _IRAN_SECTION_RE.search(body)
+        if match is None or len(re.sub(r"\s+", "", match.group(1))) < 40:
+            problems.append("تحلیل قیاسی اهمیت برای ایران ناقص است")
+    if _PASSIVE_IRAN_RE.search(haystack):
+        problems.append("جمله منفعل درباره ایران ممنوع است")
     return problems

@@ -47,7 +47,7 @@ from dotenv import load_dotenv
 from core.article_scraper import _clean_html_to_text, scrape_article_html
 from core.arvan_ai import ArvanAIRequestError, ArvanChatClient, load_arvan_ai_config
 from core.editorial.config import EditorialConfig, load_editorial_config
-from core.editorial.persian import persian_problems
+from core.editorial.persian import editorial_problems, persian_problems
 from core.editorial.prompts import (
     REPAIR_PROMPT_TEMPLATE,
     REWRITE_PROMPT_TEMPLATE,
@@ -353,12 +353,8 @@ class Command(BaseCommand):
         site_lead = str(parsed.get("site_lead") or "").strip()
         site_body = _sanitize_body(str(parsed.get("site_body") or ""))
         telegram_text = str(parsed.get("telegram_text") or "").strip()
-        if "اهمیت برای ایران" not in site_body:
-            site_body += (
-                "<h2>اهمیت برای ایران</h2>"
-                "<p>اثر مستقیم این خبر بر صنعت ایران در متن منبع نیامده است "
-                "و باید با قیمت، تأمین و مقررات داخلی سنجیده شود.</p>"
-            )
+        # Missing Iran section is caught by editorial_problems and repaired;
+        # do not inject a passive fallback that the desk forbids.
         if source_name and source_name not in site_body:
             safe_url = source_url.replace('"', "%22")
             site_body += f'<p>منبع: <a href="{safe_url}">{source_name}</a></p>'
@@ -372,12 +368,16 @@ class Command(BaseCommand):
         }
 
     def _copy_is_clean(self, copy: dict[str, str]) -> list[str]:
-        return persian_problems(_joined_text(
+        joined = _joined_text(
             copy.get("site_title"),
             copy.get("site_lead"),
             copy.get("site_body"),
             copy.get("telegram_text"),
-        ))
+        )
+        return persian_problems(joined) + editorial_problems(
+            copy.get("site_body") or "",
+            joined_text=joined,
+        )
 
     def _scrape_log(self, message: str, error: bool = False) -> None:
         stream = self.stderr if error else self.stdout
